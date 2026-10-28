@@ -25,8 +25,11 @@
 #include <Helpers/Logger.hpp>
 
 void DrawingProgramLayer::draw(SkCanvas* canvas, const DrawData& drawData) const {
-    for(auto& p : *components)
+    for(auto& p : *components) {
+        if(drawData.hiddenComponents && drawData.hiddenComponents->contains(p.obj.get_net_id())) // EncxdedCanvas: replays draw these separately
+            continue;
         p.obj->draw(canvas, drawData);
+    }
 }
 
 void DrawingProgramLayer::set_component_list_callbacks(DrawingProgramLayerListItem& layerListItem, DrawingProgramLayerManager& layerMan) {

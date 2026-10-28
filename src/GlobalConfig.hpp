@@ -22,7 +22,9 @@
 #include <Helpers/VersionNumber.hpp>
 #include "InputManager.hpp"
 
-#define DEFAULT_CANVAS_BACKGROUND_COLOR Vector3f{0.07f, 0.07f, 0.07f}
+#define DEFAULT_CANVAS_BACKGROUND_COLOR Vector3f{0.11f, 0.14f, 0.19f}
+// Bump when an EncxdedCanvas default changes and existing saved configs should be upgraded (see GlobalConfig::set_config_json)
+#define ENCXDED_CONFIG_REVISION 1
 
 class GlobalConfig {
     public:
@@ -80,6 +82,7 @@ class GlobalConfig {
             bool disableTouchWhenPenInProximity = false;
             float brushMinimumSize = 0.0f;
             float brushPressureSmoothingFactor = 0.707f;
+            float brushPressureCurve = 0.0f; // EncxdedCanvas: -1 firm (needs more pressure) to 1 soft, 0 = linear
             bool zoomWhilePenDownAndButtonHeld = true;
         } tabletOptions;
 
@@ -102,7 +105,7 @@ class GlobalConfig {
                 ACTIVE_TOOL,
                 PAN,
                 LASSO
-            } singleFingerAction = SingleFingerAction::ACTIVE_TOOL;
+            } singleFingerAction = SingleFingerAction::LASSO;
             bool twoFingerZoom = true;
             bool twoFingerRotation = true;
             bool twoFingerSnapRotation = true;
@@ -117,6 +120,21 @@ class GlobalConfig {
             MultiFingerTapAction fourFingerTapAction = MultiFingerTapAction::NONE;
             NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(TouchOptions, singleFingerAction, twoFingerZoom, twoFingerRotation, twoFingerSnapRotation, twoFingerTapAction, threeFingerTapAction, fourFingerTapAction);
         } touchOptions;
+
+        // EncxdedCanvas: simple background grid (see BackgroundGrid.cpp). App-wide until canvas profiles exist.
+        struct BackgroundGridOptions {
+            enum class Mode : int { OFF, LINES, DOTS } mode = Mode::OFF;
+            enum class Anchor : int {
+                CANVAS,         // Moves/zooms with the canvas; fades into a 4x coarser grid when zoomed out
+                SCREEN,         // Fixed on screen
+                SCREEN_ROTATING // Fixed on screen, but rotates with the view
+            } anchor = Anchor::CANVAS;
+            float width = 1.0f;     // Line thickness / dot radius in pixels
+            float boxRatio = 1.0f;  // Cell width / cell height
+            float spacing = 40.0f;  // Cell height in pixels (at 100% zoom when anchored to the canvas)
+            float opacity = 0.18f;
+            NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(BackgroundGridOptions, mode, anchor, width, boxRatio, spacing, opacity)
+        } backgroundGrid;
 
         Vector3f defaultCanvasBackgroundColor = DEFAULT_CANVAS_BACKGROUND_COLOR;
 

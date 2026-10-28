@@ -30,8 +30,8 @@
 
     <uses-permission android:name="android.permission" />
     <!-- Audio recording support -->
-    <!-- if you want to record audio, uncomment this. -->
-    <!-- <uses-permission android:name="android.permission.RECORD_AUDIO" /> -->
+    <!-- EncxdedCanvas: microphone for canvas recordings (asked for at runtime the first time the mic is turned on) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- <uses-feature
         android:name="android.hardware.microphone"
         android:required="false" /> -->

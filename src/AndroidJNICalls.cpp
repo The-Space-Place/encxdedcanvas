@@ -114,6 +114,32 @@ namespace AndroidJNICalls {
         });
     }
 
+    // EncxdedCanvas: SDL's Android save dialog has no file name parameter, so it's passed separately
+    void setSaveDialogSuggestedName(const std::string& name) {
+        JNIEnv* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
+        jni_local_frame(env, 16, [&] {
+            jobject activity = (jobject) SDL_GetAndroidActivity();
+            jclass clazz = env->GetObjectClass(activity);
+            jmethodID method_id = env->GetStaticMethodID(clazz, "setSaveDialogSuggestedName",
+                                                         "(Ljava/lang/String;)V");
+            env->CallStaticVoidMethod(clazz, method_id, string2jstring(env, name));
+        });
+    }
+
+    // EncxdedCanvas
+    bool saveVideoToGallery(const std::string& filePath, const std::string& displayName) {
+        JNIEnv* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
+        bool saved = false;
+        jni_local_frame(env, 16, [&] {
+            jobject activity = (jobject) SDL_GetAndroidActivity();
+            jclass clazz = env->GetObjectClass(activity);
+            jmethodID method_id = env->GetStaticMethodID(clazz, "saveVideoToGallery",
+                                                         "(Ljava/lang/String;Ljava/lang/String;)Z");
+            saved = env->CallStaticBooleanMethod(clazz, method_id, string2jstring(env, filePath), string2jstring(env, displayName));
+        });
+        return saved;
+    }
+
     void shareText(const std::string& str) {
         Logger::get().log(Logger::LogType::INFO, "[AndroidJNICalls::shareText] Share text " + str);
         JNIEnv* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());

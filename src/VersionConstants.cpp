@@ -30,6 +30,8 @@ VersionNumber header_to_version_number(const std::string& header) {
         m["INFPNT000004"] = VersionNumber(0, 3, 0);
         m["INFPNT000005"] = VersionNumber(0, 4, 0);
         m["INFPNT000006"] = VersionNumber(0, 6, 0);
+        m["ENCXCV000001"] = VersionNumber(1, 0, 0); // EncxdedCanvas: strokes store their pen source
+        m["ENCXCV000002"] = VersionNumber(1, 1, 0); // EncxdedCanvas: raw pen samples, locked stroke settings, centerline erasing
     }
     auto it = m.find(header);
     if(it == m.end())

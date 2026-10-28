@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- EncxdedCanvas highlighter icon: angled marker body with cap and chisel tip, plus an ink swipe -->
+<svg
+   width="32"
+   height="32"
+   viewBox="0 0 8.4666666 8.4666666"
+   version="1.1"
+   xmlns="http://www.w3.org/2000/svg">
+  <g>
+    <!-- body -->
+    <path
+       style="fill:none;stroke:#000000;stroke-width:0.79375;stroke-linecap:round;stroke-linejoin:round"
+       d="M 2.6458333,4.4979166 5.5562497,1.5874999 6.8791662,2.9104166 3.9687499,5.8208332 Z" />
+    <!-- cap -->
+    <path
+       style="fill:none;stroke:#000000;stroke-width:0.79375;stroke-linecap:round;stroke-linejoin:round"
+       d="M 5.5562497,1.5874999 6.2177081,0.92604159 7.5406246,2.2489582 6.8791662,2.9104166" />
+    <path
+       style="fill:none;stroke:#000000;stroke-width:0.79375;stroke-linecap:round;stroke-linejoin:round"
+       d="M 4.6302082,2.5135415 5.9531247,3.8364581" />
+    <!-- chisel tip -->
+    <path
+       style="fill:#000000;stroke:#000000;stroke-width:0.79375;stroke-linecap:round;stroke-linejoin:round"
+       d="M 2.6458333,4.4979166 3.9687499,5.8208332 2.9104166,6.3499999 2.1166666,5.5562499 Z" />
+    <!-- ink swipe -->
+    <path
+       style="fill:none;stroke:#000000;stroke-width:1.05833332;stroke-linecap:butt;stroke-linejoin:round"
+       d="M 0.79374999,7.6729165 H 5.2916666" />
+  </g>
+</svg>

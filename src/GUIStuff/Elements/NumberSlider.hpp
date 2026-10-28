@@ -93,7 +93,7 @@ template <typename T> class NumberSlider : public Element {
 
             SkPaint barFullP;
             barFullP.setAntiAlias(skiaAA);
-            barFullP.setColor(convert_vec4<SkColor4f>(io.theme->fillColor1));
+            barFullP.setColor(convert_vec4<SkColor4f>(io.theme->accentColor)); // EncxdedCanvas: accent-filled track
             canvas->drawRoundRect(barFull, 5.0f, 5.0f, barFullP);
 
             SkPaint barEmptyP;

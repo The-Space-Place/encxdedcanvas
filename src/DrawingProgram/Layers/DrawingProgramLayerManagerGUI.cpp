@@ -432,7 +432,7 @@ void DrawingProgramLayerManagerGUI::setup_list_gui() {
                 }
             });
             left_to_right_line_layout(gui, [&]() {
-                text_label(gui, "Blend Mode");
+                text_label_bold(gui, "Blend Mode");
                 gui.element<DropDown<size_t>>("input blend mode", &blendModeValToEdit, get_blend_mode_useful_name_list(), DropdownOptions{
                     .onClick = [&] {
                         auto editingLayerLock = editingLayer.lock();

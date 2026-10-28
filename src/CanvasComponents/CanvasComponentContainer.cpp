@@ -122,7 +122,9 @@ void CanvasComponentContainer::draw(SkCanvas* canvas, const DrawData& drawData) 
 }
 
 void CanvasComponentContainer::draw_with_predraw_data(SkCanvas* canvas, const DrawData& drawData, const PreDrawData& preDrawData) const {
-    if(preDrawData.transformData.scale < COMP_MAX_BEFORE_STOP_SCALING || !get_comp().accurate_draw(canvas, drawData, coords, preDrawData.extraData)) {
+    // EncxdedCanvas: accurate_draw is tried at any scale, so components can draw in screen space whenever their predraw data says so
+    // (only MeshCanvasComponent overrides it; the default returns false and falls back to the transformed draw)
+    if(!get_comp().accurate_draw(canvas, drawData, coords, preDrawData.extraData)) {
         canvas->save();
         canvas_do_transform(canvas, preDrawData.transformData);
         get_comp().draw(canvas, drawData, preDrawData.extraData);

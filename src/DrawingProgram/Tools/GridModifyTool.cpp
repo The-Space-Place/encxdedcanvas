@@ -160,7 +160,7 @@ void GridModifyTool::gui_phone_toolbox(CanvasEditorScreen& t) {
                 "Horizontal Lines"
             };
             left_to_right_line_layout(gui, [&]() {
-                text_label(gui, "Type");
+                text_label_bold(gui, "Type");
                 gui.element<DropDown<WorldGrid::GridType>>("filepicker select type", &g.gridType, listOfGridTypes);
             });
             input_scalar_field<uint32_t>(gui, "Subdivisions", "Subdivisions", &g.subdivisions, 1, 10, {
@@ -171,7 +171,7 @@ void GridModifyTool::gui_phone_toolbox(CanvasEditorScreen& t) {
             });
             left_to_right_line_layout(gui, [&]() {
                 t.color_selector_button("Grid Color", &g.color);
-                text_label(gui, "Grid Color");
+                text_label_bold(gui, "Grid Color");
             });
             auto bounded = std::make_shared<bool>(g.bounds.has_value());
             checkbox_boolean_field(gui, "Bounded", "Bounded", bounded.get(), [&, bounded] {

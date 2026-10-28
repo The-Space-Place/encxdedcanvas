@@ -173,6 +173,37 @@ public class InfiniPaint extends SDLActivity {
         mSingleton.stopService(new Intent(mSingleton, InfiniPaintNetworkService.class));
     }
 
+    // EncxdedCanvas: copies an exported video into Movies/EncxdedCanvas so it shows up in the Gallery.
+    // Returns false if that isn't possible (Android 9 and older need a storage permission), so the caller can share instead.
+    static public boolean saveVideoToGallery(String filePath, String displayName) {
+        if(Build.VERSION.SDK_INT < Build.VERSION_CODES.Q)
+            return false;
+        android.content.ContentResolver resolver = getContext().getContentResolver();
+        android.content.ContentValues values = new android.content.ContentValues();
+        values.put(android.provider.MediaStore.Video.Media.DISPLAY_NAME, displayName);
+        values.put(android.provider.MediaStore.Video.Media.MIME_TYPE, "video/mp4");
+        values.put(android.provider.MediaStore.Video.Media.RELATIVE_PATH, "Movies/EncxdedCanvas");
+        values.put(android.provider.MediaStore.Video.Media.IS_PENDING, 1);
+        Uri uri = resolver.insert(android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
+        if(uri == null)
+            return false;
+        try (java.io.InputStream in = new java.io.FileInputStream(filePath);
+             java.io.OutputStream out = resolver.openOutputStream(uri)) {
+            byte[] buffer = new byte[1 << 16];
+            int n;
+            while((n = in.read(buffer)) > 0)
+                out.write(buffer, 0, n);
+        } catch (Exception e) {
+            Log.v("INFO", "[saveVideoToGallery] Exception " + e);
+            resolver.delete(uri, null, null);
+            return false;
+        }
+        values.clear();
+        values.put(android.provider.MediaStore.Video.Media.IS_PENDING, 0);
+        resolver.update(uri, values, null, null);
+        return true;
+    }
+
     static public void shareInternalFiles(String[] filePaths, String mimeType, boolean prependInternalDirPath) {
         if(filePaths.length == 1) {
             File newFile;

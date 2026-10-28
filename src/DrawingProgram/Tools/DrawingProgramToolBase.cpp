@@ -69,6 +69,8 @@ std::unique_ptr<DrawingProgramToolBase> DrawingProgramToolBase::allocate_tool_ty
             return std::make_unique<PanCanvasTool>(drawP);
         case DrawingProgramToolType::LINE:
             return std::make_unique<LineDrawTool>(drawP);
+        case DrawingProgramToolType::HIGHLIGHTER:
+            return std::make_unique<BrushTool>(drawP, true);
     }
     return nullptr;
 }

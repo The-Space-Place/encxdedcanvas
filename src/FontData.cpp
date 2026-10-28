@@ -99,9 +99,29 @@ FontData::FontData()
 #endif
     //map["Roboto"] = defaultFontMgr->makeFromFile("data/fonts/Roboto-variable.ttf"); // Doesn't work on Android
     map["Roboto"] = defaultFontMgr->matchFamilyStyle("Roboto", SkFontStyle()); // Works on Android
+    map["BDO Grotesk"] = defaultFontMgr->matchFamilyStyle("BDO Grotesk", SkFontStyle());
+
+    // Clone the variable font at each standard weight so bold/extra-bold actually render with their weight axis
+    variableWeightFonts = sk_make_sp<skia::textlayout::TypefaceFontProvider>();
+    if(map["BDO Grotesk"]) {
+        for(float weight : {300.0f, 400.0f, 500.0f, 600.0f, 700.0f, 800.0f, 900.0f}) {
+            SkFontArguments::VariationPosition::Coordinate wght{SkSetFourByteTag('w', 'g', 'h', 't'), weight};
+            SkFontArguments args;
+            args.setVariationDesignPosition({&wght, 1});
+            sk_sp<SkTypeface> instance = map["BDO Grotesk"]->makeClone(args);
+            if(instance) {
+                variableWeightFonts->registerTypeface(instance, SkString("BDO Grotesk"));
+                if(weight == 400.0f)
+                    map["BDO Grotesk"] = instance;
+            }
+        }
+    }
+    else
+        map["BDO Grotesk"] = map["Roboto"];
 
     collection = sk_make_sp<skia::textlayout::FontCollection>();
-    collection->setDefaultFontManager(defaultFontMgr, std::vector<SkString>{SkString{"Roboto"}, SkString{"Noto Emoji"}, SkString{"Amiri"}});
+    collection->setAssetFontManager(variableWeightFonts);
+    collection->setDefaultFontManager(defaultFontMgr, std::vector<SkString>{SkString{"BDO Grotesk"}, SkString{"Roboto"}, SkString{"Noto Emoji"}, SkString{"Amiri"}});
     if(localFontMgr)
         collection->setDynamicFontManager(localFontMgr);
     std::string s = "🙂";
@@ -114,16 +134,13 @@ FontData::FontData()
 
 const std::vector<SkString>& FontData::get_default_font_families() const {
     static std::vector<SkString> defaultFontFamilies;
-    if(defaultFontFamilies.empty()) {
-        defaultFontFamilies.emplace_back("Roboto");
-        if(fallbackOnEmoji)
-            defaultFontFamilies.emplace_back("Noto Emoji");
-        defaultFontFamilies.emplace_back("Amiri");
-    }
+    if(defaultFontFamilies.empty())
+        push_default_font_families(defaultFontFamilies);
     return defaultFontFamilies;
 }
 
 void FontData::push_default_font_families(std::vector<SkString>& fontFamilies) const {
+    fontFamilies.emplace_back("BDO Grotesk"); // EncxdedCanvas default for interface and canvas text
     fontFamilies.emplace_back("Roboto");
     if(fallbackOnEmoji)
         fontFamilies.emplace_back("Noto Emoji");

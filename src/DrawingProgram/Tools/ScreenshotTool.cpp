@@ -37,9 +37,14 @@
 #include "../../GUIStuff/Elements/DropDown.hpp"
 
 #include "../../Screens/CanvasEditorScreen.hpp"
+#include "../../Encxded/EncxdedApp.hpp"
+#include "../../Encxded/VideoTabGUI.hpp"
+#include "../../GUIStuff/ElementHelpers/ButtonHelpers.hpp"
+#include "../../GUIStuff/ElementHelpers/LayoutHelpers.hpp"
 
 #define SECTION_SIZE 4000
 #define AA_LEVEL 4
+#define TAP_RADIUS 10.0f
 
 ScreenshotTool::ScreenshotTool(DrawingProgram& initDrawP):
     DrawingProgramToolBase(initDrawP)
@@ -64,6 +69,15 @@ void ScreenshotTool::gui_phone_toolbox(CanvasEditorScreen& t) {
                 .layoutDirection = CLAY_TOP_TO_BOTTOM
             }
         }) {
+            // EncxdedCanvas: Image (this tool's area export) / Video (recordings, Phase 7)
+            bool& videoTab = Encxded::app(drawP.world.main).exportPanelVideoTab;
+            left_to_right_line_layout(gui, [&] {
+                text_button(gui, "image tab", "Image", {.drawType = SelectableButton::DrawType::TRANSPARENT_BORDER, .isSelected = !videoTab, .wide = true, .onClick = [&] { videoTab = false; gui.set_to_layout(); }});
+                text_button(gui, "video tab", "Video", {.drawType = SelectableButton::DrawType::TRANSPARENT_BORDER, .isSelected = videoTab, .wide = true, .onClick = [&] { videoTab = true; gui.set_to_layout(); }});
+            });
+            if(videoTab)
+                Encxded::video_export_tab(drawP.world.main, drawP.world.filePath);
+            else { // EncxdedCanvas: (end of Video tab branch is below)
             text_label_centered(gui, "Export Area");
             if(controls.selectionMode == ScreenshotControls::SelectionMode::NO_SELECTION)
                 text_label(gui, "Select canvas area...");
@@ -86,7 +100,7 @@ void ScreenshotTool::gui_phone_toolbox(CanvasEditorScreen& t) {
             }
             if(controls.selectionMode == ScreenshotControls::SelectionMode::SELECTION_EXISTS) {
                 left_to_right_line_layout(gui, [&]() {
-                    text_label(gui, "Type");
+                    text_label_bold(gui, "Type");
                     gui.element<DropDown<size_t>>("image type select", (size_t*)(&screenshotConfig.selectedType), controls.typeSelections);
                 });
                 if(screenshotConfig.selectedType != WorldScreenshotInfo::ScreenshotType::SVG)
@@ -155,6 +169,7 @@ void ScreenshotTool::gui_phone_toolbox(CanvasEditorScreen& t) {
 #endif
                 });
             }
+            } // EncxdedCanvas: end of Image tab
         }
     });
 }
@@ -172,12 +187,18 @@ void ScreenshotTool::input_mouse_button_on_canvas_callback(const InputManager::M
                     controls.rectY1 = controls.rectY2 = button.pos.y();
                     controls.coords = drawP.world.drawData.cam.c;
                     controls.dragType = 0;
+                    controls.pressIsTap = true;
+                    controls.pressStartPos = button.pos;
                     controls.selectionMode = ScreenshotControls::SelectionMode::DRAGGING_BORDER;
                     drawP.world.main.g.gui.set_to_layout();
                 }
                 break;
             }
             case ScreenshotControls::SelectionMode::DRAGGING_BORDER: {
+                if(!button.down && controls.pressIsTap) {
+                    exit_export_mode();
+                    break;
+                }
                 if(!button.down && dragging_border_update(button.pos)) {
                     controls.selectionMode = ScreenshotControls::SelectionMode::SELECTION_EXISTS;
                     commit_rect();
@@ -228,6 +249,8 @@ void ScreenshotTool::input_mouse_motion_callback(const InputManager::MouseMotion
             break;
         }
         case ScreenshotControls::SelectionMode::DRAGGING_BORDER: {
+            if(controls.pressIsTap && (motion.pos - controls.pressStartPos).norm() > TAP_RADIUS * drawP.world.main.g.final_gui_scale())
+                controls.pressIsTap = false;
             dragging_border_update(motion.pos);
             drawP.world.main.g.gui.set_to_layout();
             break;
@@ -240,6 +263,20 @@ void ScreenshotTool::input_mouse_motion_callback(const InputManager::MouseMotion
             break;
         }
     }
+}
+
+void ScreenshotTool::cancel_finger_touch_callback(const FingerInput::TouchCallbackArgs& touch) {
+    // A second finger means pinch/pan, not a tap
+    controls.pressIsTap = false;
+    DrawingProgramToolBase::cancel_finger_touch_callback(touch);
+}
+
+void ScreenshotTool::exit_export_mode() {
+    controls.pressIsTap = false;
+    controls.selectionMode = ScreenshotControls::SelectionMode::NO_SELECTION;
+    drawP.toolToSwitchToAfterUpdate = DrawingProgramToolBase::allocate_tool_type(drawP, drawP.toolBeforeScreenshot);
+    drawP.exportModeExitedByTap = true;
+    drawP.world.main.g.gui.set_to_layout();
 }
 
 bool ScreenshotTool::dragging_border_update(const Vector2f& camCursorPos) {

@@ -61,14 +61,14 @@ void RectDrawEditTool::gui_phone_toolbox(CanvasEditorScreen& t) {
         if(a.d.fillStrokeMode == 0 || a.d.fillStrokeMode == 2) {
             left_to_right_line_layout(gui, [&] {
                 t.color_selector_button("Fill color button", &a.d.fillColor, { .onChange = commit_update_func });
-                text_label(gui, "Fill Color");
+                text_label_bold(gui, "Fill Color");
             });
         }
         if(a.d.fillStrokeMode == 1 || a.d.fillStrokeMode == 2) {
             slider_scalar_field(gui, "relstrokewidth", "Outline Size", &a.d.strokeWidth, 3.0f, 40.0f, { .onEdit = commit_update_func });
             left_to_right_line_layout(gui, [&] {
                 t.color_selector_button("Outline color button", &a.d.strokeColor, { .onChange = commit_update_func });
-                text_label(gui, "Outline Color");
+                text_label_bold(gui, "Outline Color");
             });
         }
     });

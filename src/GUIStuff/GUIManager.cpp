@@ -64,6 +64,15 @@ GUIManager::GUIManager()
     touchPointerObstructed = false;
 }
 
+// EncxdedCanvas: Clay's fontId selects the interface font weight (see GUI_FONT_* in GUIStuffHelpers.hpp)
+static SkFontStyle gui_font_style_from_id(uint16_t fontId) {
+    switch(fontId) {
+        case GUI_FONT_BOLD: return SkFontStyle(SkFontStyle::kBold_Weight, SkFontStyle::kNormal_Width, SkFontStyle::kUpright_Slant);
+        case GUI_FONT_EXTRA_BOLD: return SkFontStyle(SkFontStyle::kExtraBold_Weight, SkFontStyle::kNormal_Width, SkFontStyle::kUpright_Slant);
+        default: return SkFontStyle::Normal();
+    }
+}
+
 Clay_Dimensions GUIManager::clay_skia_measure_text(Clay_StringSlice str, Clay_TextElementConfig* config, void* userData) {
     GUIManager* window = static_cast<GUIManager*>(userData);
 
@@ -72,6 +81,7 @@ Clay_Dimensions GUIManager::clay_skia_measure_text(Clay_StringSlice str, Clay_Te
     skia::textlayout::TextStyle tStyle;
     tStyle.setFontSize(config->fontSize);
     tStyle.setFontFamilies(window->io.fonts->get_default_font_families());
+    tStyle.setFontStyle(gui_font_style_from_id(config->fontId));
     pStyle.setTextStyle(tStyle);
 
     skia::textlayout::ParagraphBuilderImpl a(pStyle, window->io.fonts->collection, SkUnicodes::ICU::Make());
@@ -125,6 +135,14 @@ void GUIManager::draw(SkCanvas* c, bool skiaAA) {
     if(io.redrawSurface)
         invalidDrawBB = std::nullopt;
     if(io.redrawSurface || invalidDrawBB.has_value()) {
+        if(trackRedrawnArea) { // EncxdedCanvas
+            SCollision::AABB<float> area = io.redrawSurface ? SCollision::AABB<float>({0.0f, 0.0f}, {static_cast<float>(io.surface->width()), static_cast<float>(io.surface->height())})
+                                                            : SCollision::AABB<float>(invalidDrawBB.value().min * io.guiScaleMultiplier, invalidDrawBB.value().max * io.guiScaleMultiplier);
+            if(redrawnArea.has_value())
+                redrawnArea = SCollision::AABB<float>(redrawnArea->min.cwiseMin(area.min), redrawnArea->max.cwiseMax(area.max));
+            else
+                redrawnArea = area;
+        }
         SkCanvas* canvas = io.surface->getCanvas();
 
         std::optional<SCollision::AABB<float>> clipRect;
@@ -179,6 +197,7 @@ void GUIManager::draw(SkCanvas* c, bool skiaAA) {
                     skia::textlayout::TextStyle tStyle;
                     tStyle.setFontSize(config->fontSize);
                     tStyle.setFontFamilies(io.fonts->get_default_font_families());
+                    tStyle.setFontStyle(gui_font_style_from_id(config->fontId));
                     tStyle.setColor(convert_clay_color_to_skcolor4f(config->textColor).toSkColor());
                     pStyle.setTextStyle(tStyle);
 
@@ -320,6 +339,12 @@ void GUIManager::draw(SkCanvas* c, bool skiaAA) {
     c->drawImage(io.surface->makeTemporaryImage(), 0, 0, {SkFilterMode::kNearest, SkMipmapMode::kNone}, nullptr);
 }
 
+std::optional<SCollision::AABB<float>> GUIManager::take_redrawn_area() {
+    std::optional<SCollision::AABB<float>> a;
+    a.swap(redrawnArea);
+    return a;
+}
+
 void GUIManager::draw_force(SkCanvas* canvas, bool skiaAA) {
     canvas->save();
     canvas->scale(io.guiScaleMultiplier, io.guiScaleMultiplier);
@@ -360,6 +385,7 @@ void GUIManager::draw_force(SkCanvas* canvas, bool skiaAA) {
                 skia::textlayout::TextStyle tStyle;
                 tStyle.setFontSize(config->fontSize);
                 tStyle.setFontFamilies(io.fonts->get_default_font_families());
+                tStyle.setFontStyle(gui_font_style_from_id(config->fontId));
                 tStyle.setColor(convert_clay_color_to_skcolor4f(config->textColor).toSkColor());
                 pStyle.setTextStyle(tStyle);
 

@@ -28,14 +28,21 @@
 #include "../../CanvasComponents/CanvasComponentContainer.hpp"
 #include "../../GUIStuff/ElementHelpers/TextLabelHelpers.hpp"
 #include "../../GUIStuff/ElementHelpers/CheckBoxHelpers.hpp"
+#include "../../GUIStuff/ElementHelpers/NumberSliderHelpers.hpp"
 #include <include/pathops/SkPathOps.h>
 
-BrushTool::BrushTool(DrawingProgram& initDrawP):
-    DrawingProgramToolBase(initDrawP)
+BrushTool::BrushTool(DrawingProgram& initDrawP, bool initIsHighlighter):
+    DrawingProgramToolBase(initDrawP),
+    isHighlighter(initIsHighlighter)
 {}
 
 DrawingProgramToolType BrushTool::get_type() {
-    return DrawingProgramToolType::BRUSH;
+    return isHighlighter ? DrawingProgramToolType::HIGHLIGHTER : DrawingProgramToolType::BRUSH;
+}
+
+bool BrushTool::has_round_caps() {
+    auto& toolConfig = drawP.world.main.toolConfig;
+    return isHighlighter ? toolConfig.highlighter.roundEnds : toolConfig.brush.hasRoundCaps;
 }
 
 void BrushTool::switch_tool(DrawingProgramToolType newTool) {
@@ -63,9 +70,25 @@ void BrushTool::input_mouse_button_on_canvas_callback(const InputManager::MouseB
             MeshCanvasComponent& newMesh = static_cast<MeshCanvasComponent&>(newMeshContainer->get_comp());
 
             newMesh.d.color = toolConfig.globalConf.foregroundColor;
+            if(isHighlighter)
+                newMesh.d.color.w() *= toolConfig.highlighter.opacity;
             newMeshContainer->coords = drawP.world.drawData.cam.c;
 
-            BrushComponentCode::mouse_button(drawP, genData, newMeshContainer->coords, button, relativeWidthResult.first.value());
+            // EncxdedCanvas: the stroke is rebuilt from raw samples with these settings, which are locked into it
+            auto& conf = drawP.world.main.conf;
+            strokeParams = BrushComponentCode::StrokeParams{
+                .baseWidth = relativeWidthResult.first.value(),
+                .unitScale = 1.0f, // The stroke's space is the camera's (screen pixels) until it's normalized
+                .stabilizer = conf.brushStrokeSmoothingFactor,
+                .pressureSmoothing = conf.tabletOptions.brushPressureSmoothingFactor,
+                .pressureAffectsWidth = !isHighlighter && conf.tabletOptions.pressureAffectsBrushWidth, // Highlighter: constant width
+                .minimumSize = conf.tabletOptions.brushMinimumSize,
+                .pressureCurve = conf.tabletOptions.brushPressureCurve
+            };
+            currentPressure = button.deviceType == InputManager::MouseDeviceType::PEN ? drawP.world.main.input.pen.pressure : 1.0f;
+            strokeStart = std::chrono::steady_clock::now();
+            rawSamples.clear();
+            rawSamples.push_back({button.pos, currentPressure, 0.0f});
 
             objInfoBeingEdited = drawP.layerMan.add_component_to_layer_being_edited(newMeshContainer);
             commit_data(false);
@@ -89,7 +112,11 @@ void BrushTool::commit_data(bool final) {
     if(objInfoBeingEdited) {
         NetworkingObjects::NetObjOwnerPtr<CanvasComponentContainer>& containerPtr = objInfoBeingEdited->obj;
         MeshCanvasComponent& newMesh = static_cast<MeshCanvasComponent&>(containerPtr->get_comp());
-        newMesh.d.meshPath = BrushComponentCode::brush_stroke_to_skpath(genData.brushPoints, drawP.world.main.toolConfig.brush.hasRoundCaps);
+        newMesh.d.rawSamples = rawSamples;
+        newMesh.d.strokeParams = strokeParams;
+        newMesh.d.penPoints = BrushComponentCode::process_raw_samples(rawSamples, strokeParams, final);
+        newMesh.d.penRoundCaps = has_round_caps();
+        newMesh.d.meshPath = BrushComponentCode::brush_stroke_to_skpath(newMesh.d.penPoints, newMesh.d.penRoundCaps);
         if(final) {
             containerPtr->get_comp().simplify_paths();
             containerPtr->normalize_object_coordinates();
@@ -109,24 +136,27 @@ void BrushTool::commit_data(bool final) {
 
 void BrushTool::input_mouse_motion_callback(const InputManager::MouseMotionCallbackArgs& motion) {
     if(objInfoBeingEdited) {
-        auto& toolConfig = drawP.world.main.toolConfig;
         NetworkingObjects::NetObjOwnerPtr<CanvasComponentContainer>& containerPtr = objInfoBeingEdited->obj;
-        BrushComponentCode::mouse_motion(drawP, genData, motion.pos, toolConfig.get_relative_width_stroke_size(drawP, containerPtr->coords.inverseScale).first.value(), drawP.world.main.conf.brushStrokeSmoothingFactor);
-        commitUpdate = true;
+        Vector2f pos = containerPtr->coords.to_space(drawP.world.drawData.cam.c.from_space(motion.pos));
+        if(pos != rawSamples.back().pos) { // A repeated position would read as a pressure-only sample
+            rawSamples.push_back({pos, currentPressure, seconds_since_stroke_start()});
+            commitUpdate = true;
+        }
     }
 }
 
 void BrushTool::input_pen_axis_callback(const InputManager::PenAxisCallbackArgs& axis) {
-    if(axis.axis == SDL_PEN_AXIS_PRESSURE && drawP.world.main.conf.tabletOptions.pressureAffectsBrushWidth) {
-        genData.penWidth = axis.value;
-        if(genData.penWidth != 0.0f && objInfoBeingEdited) {
-            auto& toolConfig = drawP.world.main.toolConfig;
-            NetworkingObjects::NetObjOwnerPtr<CanvasComponentContainer>& containerPtr = objInfoBeingEdited->obj;
-            float width = toolConfig.get_relative_width_stroke_size(drawP, containerPtr->coords.inverseScale).first.value();
-            BrushComponentCode::pen_pressure(drawP, genData, width);
+    if(axis.axis == SDL_PEN_AXIS_PRESSURE) {
+        currentPressure = axis.value;
+        if(objInfoBeingEdited && !isHighlighter && strokeParams.pressureAffectsWidth) {
+            rawSamples.push_back({rawSamples.back().pos, currentPressure, seconds_since_stroke_start()});
             commitUpdate = true;
         }
     }
+}
+
+float BrushTool::seconds_since_stroke_start() const {
+    return std::chrono::duration<float>(std::chrono::steady_clock::now() - strokeStart).count();
 }
 
 void BrushTool::tool_update() {
@@ -140,8 +170,7 @@ void BrushTool::tool_update() {
 void BrushTool::commit_stroke() {
     if(objInfoBeingEdited) {
         NetworkingObjects::NetObjOwnerPtr<CanvasComponentContainer>& containerPtr = objInfoBeingEdited->obj;
-        BrushComponentCode::fix_tip(genData.brushPoints);
-        commit_data(true);
+        commit_data(true); // Final processing includes the tip fix
         if(containerPtr->get_world_bounds().has_value())
             drawP.layerMan.add_undo_place_component(objInfoBeingEdited);
         else {
@@ -158,9 +187,18 @@ void BrushTool::gui_phone_toolbox(CanvasEditorScreen& t) {
 
     auto& gui = drawP.world.main.g.gui;
 
+    auto& toolConfig = drawP.world.main.toolConfig;
+    if(isHighlighter) {
+        gui.new_id("highlighter tool", [&] {
+            checkbox_boolean_field(gui, "hasroundcaps", "Round Caps", &toolConfig.highlighter.roundEnds);
+            slider_scalar_field(gui, "highlighter opacity", "Opacity", &toolConfig.highlighter.opacity, 0.05f, 1.0f, {.decimalPrecision = 2});
+            toolConfig.relative_width_gui(drawP, "Size");
+        });
+        return;
+    }
     gui.new_id("brush tool", [&] {
-        checkbox_boolean_field(gui, "hasroundcaps", "Round Caps", &drawP.world.main.toolConfig.brush.hasRoundCaps);
-        drawP.world.main.toolConfig.relative_width_gui(drawP, "Size");
+        checkbox_boolean_field(gui, "hasroundcaps", "Round Caps", &toolConfig.brush.hasRoundCaps);
+        toolConfig.relative_width_gui(drawP, "Size");
     });
 }
 
@@ -178,7 +216,7 @@ void BrushTool::draw(SkCanvas* canvas, const DrawData& drawData) {
         if(relativeWidthResult.first.has_value()) {
             float width = relativeWidthResult.first.value();
             if(objInfoBeingEdited)
-                width *= genData.penWidth * 0.5f;
+                width *= BrushComponentCode::pressure_to_width_factor(currentPressure, strokeParams) * 0.5f;
             else
                 width *= 0.5f;
             width += 1.0f;

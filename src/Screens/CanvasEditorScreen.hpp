@@ -22,6 +22,8 @@
 #include "CanvasEditorUI/ChatMessageGUI.hpp"
 #include "CanvasScreen.hpp"
 #include "../GUIStuff/Elements/TreeListing.hpp"
+#include "../DrawingProgram/Tools/DrawingProgramToolBase.hpp"
+#include "../Encxded/Recorder.hpp"
 
 class CanvasEditorScreen : public CanvasScreen {
     public:
@@ -89,6 +91,19 @@ class CanvasEditorScreen : public CanvasScreen {
         void bottom_toolbar();
         void main_display();
         void tool_settings_popup();
+
+        // EncxdedCanvas: top-left tool cluster (CanvasEditorUI/CanvasEditorToolCluster.cpp)
+        void tool_cluster();
+        void tool_cluster_row(const char* id, const std::function<void()>& content);
+        void tool_cluster_tool_button(const char* id, const std::string& svgPath, DrawingProgramToolType toolType);
+        void tool_cluster_update();
+        std::string lastZoomLabel;
+        void tool_cluster_zoom_row();
+        void tool_cluster_tool_row();
+        void tool_cluster_overflow_row();
+        void tool_cluster_size_row();
+        void tool_cluster_color_row();
+        bool toolOverflowOpen = false;
         void desktop_save_file();
         void desktop_save_as_file();
         void mobile_save_file();
@@ -105,6 +120,16 @@ class CanvasEditorScreen : public CanvasScreen {
 
         std::vector<std::shared_ptr<World>> worlds;
         std::unordered_set<World*> tabsToClose;
+
+        // EncxdedCanvas: recording (CanvasEditorUI/CanvasEditorRecording.cpp). Declared after worlds, so it stops before they go.
+    public:
+        bool is_recording() const { return recorder != nullptr; }
+        void start_recording();
+        void stop_recording(bool offerExport = true); // offerExport opens the export panel's Video tab
+    private:
+        std::unique_ptr<Encxded::Recorder> recorder;
+        int64_t recordingShownSecond = -1;
+        void recording_pill();
 
         const bool mobileUI;
 

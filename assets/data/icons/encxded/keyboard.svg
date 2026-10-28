@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- EncxdedCanvas: text entry (keyboard) -->
+<svg width="32" height="32" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <g fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2.5" y="6" width="19" height="12" rx="2"/>
+    <path d="M6 10H6.01"/>
+    <path d="M10 10H10.01"/>
+    <path d="M14 10H14.01"/>
+    <path d="M18 10H18.01"/>
+    <path d="M8 14H16"/>
+  </g>
+</svg>

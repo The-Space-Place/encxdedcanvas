@@ -26,11 +26,16 @@
 #include "../../GUIStuff/ElementHelpers/TextBoxHelpers.hpp"
 #include "../../GUIStuff/ElementHelpers/ButtonHelpers.hpp"
 #include "../../GUIStuff/ElementHelpers/ColorPickerHelpers.hpp"
+#include "../../GUIStuff/ElementHelpers/NumberSliderHelpers.hpp"
 #include "../../GUIStuff/Elements/ScrollArea.hpp"
 #include "Helpers/ConvertVec.hpp"
 
 using namespace GUIStuff;
 using namespace ElementHelpers;
+
+// EncxdedCanvas tablet layout: tiles match the tool cluster's 40px rows
+constexpr float TOP_TILE_BUTTON_SIZE = 36.0f;
+constexpr float TOP_TILE_NAME_WIDTH = 260.0f;
 
 CanvasEditorTopToolbar::CanvasEditorTopToolbar(CanvasEditorScreen& initScreen):
     s(initScreen)
@@ -59,27 +64,32 @@ void CanvasEditorTopToolbar::layout_top_toolbar() {
         CLAY_AUTO_ID({
             .layout = {
                 .sizing = {.width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_FIT(0) },
-                .padding = CLAY_PADDING_ALL(static_cast<uint16_t>(s.mobileUI ? 0 : io.theme->padding1))
+                .padding = CLAY_PADDING_ALL(io.theme->padding1)
             },
         }) {
+            // EncxdedCanvas: on the tablet layout the bar has no background of its own; its groups are separate
+            // tiles matching the tool cluster (back/name/hide on the left, actions on the right)
             gui.element<LayoutElement>("top menu bar", [&] (LayoutElement*, const Clay_ElementId& lId) {
                 CLAY(lId, {
                     .layout = {
                         .sizing = {.width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_FIT(0) },
-                        .childGap = static_cast<uint16_t>(io.theme->childGap1 / 2),
+                        .childGap = static_cast<uint16_t>(s.mobileUI ? 4 : io.theme->childGap1 / 2),
                         .childAlignment = { .x = CLAY_ALIGN_X_LEFT, .y = CLAY_ALIGN_Y_CENTER},
                         .layoutDirection = CLAY_LEFT_TO_RIGHT
                     },
-                    .backgroundColor = convert_vec4<Clay_Color>(io.theme->backColor1),
+                    .backgroundColor = s.mobileUI ? Clay_Color{0, 0, 0, 0} : convert_vec4<Clay_Color>(io.theme->backColor1),
                     .cornerRadius = CLAY_CORNER_RADIUS(io.theme->windowCorners1)
                 }) {
                     if(s.mobileUI) {
-                        svg_icon_button(gui, "back exit button", "data/icons/RemixIcon/arrow-left-s-line.svg", {
-                            .drawType = SelectableButton::DrawType::TRANSPARENT_ALL,
-                            .onClick = [&] {
-                                s.mobile_save_file();
-                                s.set_tab_to_close(s.world.get());
-                            }
+                        s.tool_cluster_row("back tile", [&] {
+                            svg_icon_button(gui, "back exit button", "data/icons/RemixIcon/arrow-left-s-line.svg", {
+                                .drawType = SelectableButton::DrawType::TRANSPARENT_ALL,
+                                .size = TOP_TILE_BUTTON_SIZE,
+                                .onClick = [&] {
+                                    s.mobile_save_file();
+                                    s.set_tab_to_close(s.world.get());
+                                }
+                            });
                         });
                     }
                     else {
@@ -229,13 +239,8 @@ void CanvasEditorTopToolbar::layout_settings_popup() {
         case SettingsPopup::CANVAS_SETTINGS:
             settings_popup_default_layout("canvas settings popup menu", [&] {
                 settings_popup_close_button_ontop();
-                text_label_centered(gui, "Canvas Settings");
-
-                std::shared_ptr<Vector3f> backgroundColorTemporary = std::make_shared<Vector3f>(convert_vec3<Vector3f>(s.world->canvasTheme.get_back_color()));
-                color_picker_button_field(gui, "currentCanvasBackgroundColor", "Background color", backgroundColorTemporary.get(), { .hasAlpha = false, .onEdit = [&, backgroundColorTemporary] {
-                    s.world->canvasTheme.set_back_color(*backgroundColorTemporary);
-                }});
-            });
+                canvas_settings_panel();
+            }, true, 400.0f);
             break;
         case SettingsPopup::HOST:
             settings_popup_default_layout("host popup menu", [&] {
@@ -536,6 +541,35 @@ void CanvasEditorTopToolbar::remaining_area() {
                 s.world->redo_with_checks();
             }
         },
+        IconMenuButton{ // EncxdedCanvas: recordings (Phase 7)
+            .name = "Record",
+            .svgPath = "data/icons/encxded/record.svg",
+            .isSelected = s.is_recording(),
+            .onClick = [&] {
+                if(s.is_recording())
+                    s.stop_recording();
+                else
+                    s.start_recording();
+            }
+        },
+        IconMenuButton{
+            .name = "Export Area",
+            .svgPath = "data/icons/camera.svg",
+            .isSelected = s.world->drawProg.drawTool->get_type() == DrawingProgramToolType::SCREENSHOT,
+            .onClick = [&] {
+                s.world->drawProg.switch_to_tool(DrawingProgramToolType::SCREENSHOT);
+                // The export options (format, size, Save/Share) live in the tool settings panel, so open it
+                s.set_settings_menu_popup_mode_with_color_picker_data(CanvasEditorScreen::SettingsMenuPopup::SETTINGS);
+            }
+        },
+        IconMenuButton{
+            .name = "Canvas Settings",
+            .svgPath = "data/icons/grid.svg",
+            .isSelected = settingsPopup == SettingsPopup::CANVAS_SETTINGS,
+            .onClick = [&] {
+                settingsPopup = settingsPopup == SettingsPopup::CANVAS_SETTINGS ? SettingsPopup::NONE : SettingsPopup::CANVAS_SETTINGS;
+            }
+        },
         IconMenuButton{
             .name = "Bookmarks",
             .svgPath = "data/icons/bookmark.svg",
@@ -553,7 +587,7 @@ void CanvasEditorTopToolbar::remaining_area() {
             }
         },
         IconMenuButton{
-            .name = "Grids",
+            .name = "Advanced Grids",
             .svgPath = "data/icons/grid.svg",
             .isSelected = settingsPopup == SettingsPopup::GRIDS,
             .onClick = [&] {
@@ -573,10 +607,13 @@ void CanvasEditorTopToolbar::remaining_area() {
         CLAY(lId, {
             .layout = {
                 .sizing = {.width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_FIT(0)},
+                .childGap = static_cast<uint16_t>(s.mobileUI ? 4 : 0), // Same gap as between the back and name tiles
                 .childAlignment = {.x = CLAY_ALIGN_X_LEFT, .y = CLAY_ALIGN_Y_CENTER}
             }
         }) {
-            if(l->get_bb().has_value()) {
+            if(l->get_bb().has_value() && s.mobileUI)
+                mobile_tiled_remaining_area(l->get_bb().value().width(), listOfTopToolbarButtons);
+            else if(l->get_bb().has_value()) {
                 float MINIMUM_SPACE_FOR_NAME = s.mobileUI ? 100.0f : 250.0f;
                 float spaceForWorldName = l->get_bb().value().width() - BIG_BUTTON_SIZE;
                 if(spaceForWorldName < 4.0f)
@@ -617,6 +654,163 @@ void CanvasEditorTopToolbar::remaining_area() {
     });
 }
 
+// EncxdedCanvas: settings panel from the mockup (grid type/anchor/sizes, background presets)
+void CanvasEditorTopToolbar::canvas_settings_panel() {
+    auto& main = s.main;
+    auto& gui = main.g.gui;
+    auto& grid = main.conf.backgroundGrid;
+    using Opts = GlobalConfig::BackgroundGridOptions;
+
+    auto segmented = [&]<typename T>(const char* id, T* value, const std::vector<std::pair<const char*, T>>& options) {
+        gui.new_id(id, [&] {
+            left_to_right_line_layout(gui, [&] {
+                for(auto& [label, optionValue] : options) {
+                    text_button(gui, label, label, {
+                        .drawType = SelectableButton::DrawType::TRANSPARENT_BORDER,
+                        .isSelected = *value == optionValue,
+                        .bold = true,
+                        .onClick = [value, v = optionValue] { *value = v; }
+                    });
+                }
+            });
+        });
+    };
+
+    text_label_heading(gui, "Settings", 1.5f);
+
+    text_label_heading(gui, "Grid", 1.2f);
+    segmented("grid mode", &grid.mode, std::vector<std::pair<const char*, Opts::Mode>>{
+        {"OFF", Opts::Mode::OFF}, {"LINES", Opts::Mode::LINES}, {"DOTS", Opts::Mode::DOTS}
+    });
+    if(grid.mode != Opts::Mode::OFF) {
+        text_label_bold(gui, "Anchor");
+        segmented("grid anchor", &grid.anchor, std::vector<std::pair<const char*, Opts::Anchor>>{
+            {"Canvas", Opts::Anchor::CANVAS}, {"Screen", Opts::Anchor::SCREEN}, {"Screen + Rotation", Opts::Anchor::SCREEN_ROTATING}
+        });
+        slider_scalar_field(gui, "grid width", "Width", &grid.width, 0.25f, 6.0f, {.decimalPrecision = 1});
+        slider_scalar_field(gui, "grid box ratio", "Box Ratio", &grid.boxRatio, 0.25f, 4.0f, {.decimalPrecision = 2});
+        slider_scalar_field(gui, "grid spacing", "Spacing", &grid.spacing, 8.0f, 200.0f, {.decimalPrecision = 0});
+        slider_scalar_field(gui, "grid opacity", "Opacity", &grid.opacity, 0.05f, 1.0f, {.decimalPrecision = 2});
+    }
+
+    text_label_heading(gui, "Background Color", 1.2f);
+    Vector3f currentBack = convert_vec3<Vector3f>(s.world->canvasTheme.get_back_color());
+    struct BackgroundPreset { const char* name; Vector3f color; };
+    const std::array<BackgroundPreset, 3> presets{{
+        {"Default", DEFAULT_CANVAS_BACKGROUND_COLOR},
+        {"Light", Vector3f{0.93f, 0.93f, 0.91f}},
+        {"Blueprint", Vector3f{0.12f, 0.42f, 0.85f}}
+    }};
+    bool isCustom = std::none_of(presets.begin(), presets.end(), [&](auto& p) { return (p.color - currentBack).norm() < 0.002f; });
+
+    left_to_right_line_layout(gui, [&] {
+        auto presetButton = [&](const char* id, const char* label, std::shared_ptr<Vector3f> color, bool selected, std::function<void()> onClick) {
+            gui.new_id(id, [&] {
+                CLAY_AUTO_ID({
+                    .layout = {
+                        .sizing = {.width = CLAY_SIZING_FIT(0), .height = CLAY_SIZING_FIT(0)},
+                        .childGap = 2,
+                        .childAlignment = {.x = CLAY_ALIGN_X_CENTER},
+                        .layoutDirection = CLAY_TOP_TO_BOTTOM
+                    }
+                }) {
+                    color_button(gui, "swatch", color.get(), {
+                        .drawType = SelectableButton::DrawType::SWATCH,
+                        .isSelected = selected,
+                        .hasAlpha = false,
+                        .size = 48.0f,
+                        .onClick = [onClick, color] { onClick(); } // Keeps the displayed color alive with the button
+                    });
+                    text_label_styled(gui, label, GUI_FONT_REGULAR, 0.8f);
+                }
+            });
+        };
+        presetButton("custom", "Custom", std::make_shared<Vector3f>(currentBack), isCustom, [&] {
+            customBackgroundPickerOpen = !customBackgroundPickerOpen;
+        });
+        for(auto& p : presets) {
+            presetButton(p.name, p.name, std::make_shared<Vector3f>(p.color), !isCustom && (p.color - currentBack).norm() < 0.002f, [&, c = p.color] {
+                s.world->canvasTheme.set_back_color(c);
+                customBackgroundPickerOpen = false;
+            });
+        }
+    });
+    if(customBackgroundPickerOpen) {
+        std::shared_ptr<Vector3f> backgroundColorTemporary = std::make_shared<Vector3f>(currentBack);
+        color_picker_button_field(gui, "currentCanvasBackgroundColor", "Custom color", backgroundColorTemporary.get(), { .hasAlpha = false, .onEdit = [&, backgroundColorTemporary] {
+            s.world->canvasTheme.set_back_color(*backgroundColorTemporary);
+        }});
+    }
+}
+
+void CanvasEditorTopToolbar::mobile_tiled_remaining_area(float width, std::vector<IconMenuButton> buttons) {
+    auto& main = s.main;
+    auto& gui = main.g.gui;
+    constexpr float TILE_GAP = 4.0f;
+    constexpr float TILE_BUTTON_STEP = TOP_TILE_BUTTON_SIZE + 2.0f;
+
+    // Hide-UI gets its own tile next to the name, like Ahmni's eye button
+    std::erase_if(buttons, [](const IconMenuButton& b) { return b.name == "Hide Toolbars"; });
+
+    s.tool_cluster_row("name tile", [&] {
+        CLAY_AUTO_ID({
+            .layout = {
+                .sizing = {.width = CLAY_SIZING_FIXED(TOP_TILE_NAME_WIDTH), .height = CLAY_SIZING_GROW(0)},
+                .padding = {.left = 6, .right = 6},
+                .childAlignment = {.x = CLAY_ALIGN_X_LEFT, .y = CLAY_ALIGN_Y_CENTER}
+            }
+        }) {
+            mobile_ui_name_fill();
+        }
+    });
+    s.tool_cluster_row("hide ui tile", [&] {
+        svg_icon_button(gui, "hide ui button", "data/icons/eyeopen.svg", {
+            .drawType = SelectableButton::DrawType::TRANSPARENT_ALL,
+            .size = TOP_TILE_BUTTON_SIZE,
+            .onClick = [&] {
+                main.hideInterface = true;
+            }
+        });
+    });
+
+    CLAY_AUTO_ID({.layout = {.sizing = {.width = CLAY_SIZING_GROW(0)}}}) {}
+
+    // Only the primary actions (undo, redo, record, export area) sit in the tile; the rest, and whatever doesn't fit, go in "more"
+    constexpr size_t PRIMARY_ACTION_COUNT = 4;
+    float spaceLeft = width - (TOP_TILE_NAME_WIDTH + 4.0f + TILE_GAP) - (TOP_TILE_BUTTON_SIZE + 4.0f + TILE_GAP) - TILE_GAP - (TILE_BUTTON_STEP + 4.0f);
+    size_t visibleCount = 0;
+    while(visibleCount < std::min(buttons.size(), PRIMARY_ACTION_COUNT) && spaceLeft >= TILE_BUTTON_STEP) {
+        spaceLeft -= TILE_BUTTON_STEP;
+        visibleCount++;
+    }
+
+    s.tool_cluster_row("actions tile", [&] {
+        gui.new_id("visible buttons", [&] {
+            for(size_t i = 0; i < visibleCount; i++) {
+                gui.new_id(i, [&] {
+                    svg_icon_button(gui, "button", buttons[i].svgPath, {
+                        .drawType = SelectableButton::DrawType::TRANSPARENT_ALL,
+                        .isSelected = buttons[i].isSelected,
+                        .size = TOP_TILE_BUTTON_SIZE,
+                        .onClick = buttons[i].onClick
+                    });
+                });
+            }
+        });
+        std::vector<IconMenuButton> hiddenButtons(buttons.begin() + visibleCount, buttons.end());
+        Element* e = svg_icon_button(gui, "Hidden buttons", "data/icons/RemixIcon/more-2-fill.svg", {
+            .drawType = SelectableButton::DrawType::TRANSPARENT_ALL,
+            .isSelected = settingsPopup == SettingsPopup::HIDDEN_BUTTONS,
+            .size = TOP_TILE_BUTTON_SIZE,
+            .onClick = [&] {
+                settingsPopup = settingsPopup == SettingsPopup::HIDDEN_BUTTONS ? SettingsPopup::NONE : SettingsPopup::HIDDEN_BUTTONS;
+            }
+        });
+        if(settingsPopup == SettingsPopup::HIDDEN_BUTTONS)
+            hidden_button_popup(e, hiddenButtons);
+    });
+}
+
 void CanvasEditorTopToolbar::mobile_ui_name_fill() {
     auto& main = s.main;
     auto& gui = s.main.g.gui;
@@ -633,9 +827,14 @@ void CanvasEditorTopToolbar::mobile_ui_name_fill() {
                 fileOldPath = s.world->filePath;
             },
             .onDeselect = [&] {
+                s.stop_recording(false); // EncxdedCanvas: its files are about to move
                 std::filesystem::remove(fileOldPath);
                 std::filesystem::remove(fileOldPath.parent_path() / (fileOldPath.stem().string() + ".jpg"));
                 s.world->autosave_to_directory(s.world->filePath.parent_path());
+                // EncxdedCanvas: recordings follow the canvas to its new name
+                std::error_code ec;
+                if(s.world->filePath != fileOldPath && std::filesystem::exists(Encxded::Recording::folder_for_canvas(fileOldPath), ec))
+                    std::filesystem::rename(Encxded::Recording::folder_for_canvas(fileOldPath), Encxded::Recording::folder_for_canvas(s.world->filePath), ec);
             }
         });
     }

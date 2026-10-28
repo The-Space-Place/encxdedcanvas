@@ -20,6 +20,8 @@
 #include "DrawCamera.hpp"
 #include "ResourceManager.hpp"
 #include "FontData.hpp"
+#include <Helpers/NetworkingObjects/NetObjID.hpp>
+#include <unordered_set>
 
 using namespace Eigen;
 
@@ -36,6 +38,8 @@ struct DrawData {
     bool drawGrids = true;
     bool transparentBackground = false;
     bool skiaAA = false;
+    // EncxdedCanvas: components left out of layer drawing (replays draw a selection being dragged separately)
+    const std::unordered_set<NetworkingObjects::NetObjID>* hiddenComponents = nullptr;
     WorldScalar clampDrawMinimum;
     void refresh_draw_optimizing_values();
 };

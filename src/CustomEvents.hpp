@@ -76,6 +76,7 @@ namespace CustomEvents {
         std::string netSource;
         std::string serverLocalID;
         std::string fileDataBuffer;
+        bool isReplay = false; // EncxdedCanvas: client world fed from a recording (requires isClient)
     };
 
     struct AddFileToCanvasEvent {

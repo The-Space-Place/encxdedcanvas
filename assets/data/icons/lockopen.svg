@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- EncxdedCanvas: open padlock (rotation unlocked) -->
+<svg
+   width="32"
+   height="32"
+   viewBox="0 0 8.4666666 8.4666666"
+   version="1.1"
+   xmlns="http://www.w3.org/2000/svg">
+  <path
+     style="fill:none;stroke:#000000;stroke-width:0.79375;stroke-linecap:round;stroke-linejoin:round"
+     d="M 1.8520833,3.96875 H 6.6145833 V 7.40833 H 1.8520833 Z" />
+  <path
+     style="fill:none;stroke:#000000;stroke-width:0.79375;stroke-linecap:round;stroke-linejoin:round"
+     d="M 5.6885416,3.96875 V 2.6458333 C 5.6885416,1.0583333 8.0,1.0583333 8.0,2.3812499" />
+  <path
+     style="fill:none;stroke:#000000;stroke-width:0.79375;stroke-linecap:round"
+     d="M 4.2333333,5.2916666 V 6.0854166" />
+</svg>

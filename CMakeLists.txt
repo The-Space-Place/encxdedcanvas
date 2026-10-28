@@ -38,6 +38,7 @@ set(sources "src/main.cpp"
             "src/ClientData.cpp"
             "src/GridManager.cpp"
             "src/WorldGrid.cpp"
+            "src/BackgroundGrid.cpp"
             "src/TimePoint.cpp"
             "src/InputManager.cpp"
             "src/FingerInputTracker.cpp"
@@ -64,6 +65,22 @@ set(sources "src/main.cpp"
             "src/Screens/CanvasEditorScreen.cpp"
             "src/Screens/FileSelectScreen.cpp"
             "src/Screens/CanvasEditorUI/CanvasEditorTopToolbar.cpp"
+            "src/Screens/CanvasEditorUI/CanvasEditorToolCluster.cpp"
+            "src/Screens/CanvasEditorUI/CanvasEditorRecording.cpp"
+            "src/Encxded/EncxdedApp.cpp"
+            "src/Encxded/MenuData.cpp"
+            "src/Encxded/MenuWidgets.cpp"
+            "src/Encxded/MiniZip.cpp"
+            "src/Encxded/SessionsGUI.cpp"
+            "src/Encxded/MainMenuScreen.cpp"
+            "src/Encxded/MainMenuNotes.cpp"
+            "src/Encxded/MainMenuBoards.cpp"
+            "src/Encxded/MainMenuBackup.cpp"
+            "src/Encxded/Recorder.cpp"
+            "src/Encxded/Replayer.cpp"
+            "src/Encxded/VideoEncoder.cpp"
+            "src/Encxded/VideoExport.cpp"
+            "src/Encxded/VideoTabGUI.cpp"
             "src/Screens/CanvasEditorUI/CanvasEditorCenterPopupGUI.cpp"
             "src/Screens/CanvasEditorUI/ProgramSettingsGUI.cpp"
             "src/Screens/CanvasEditorUI/AboutDisplayGUI.cpp"
@@ -347,6 +364,7 @@ endif()
 target_compile_definitions(main PRIVATE IS_CLIENT)
 if(WIN32)
     target_compile_definitions(main PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_link_libraries(main mfplat mfreadwrite mfuuid ole32 shell32) # EncxdedCanvas: MP4 export (Media Foundation, Videos folder)
 endif()
 
 if(LINUX AND (NOT ANDROID) AND LINUX_ADD_VIDEO_DRIVER_OPTION)
@@ -454,6 +472,7 @@ if(ANDROID)
         message(FATAL_ERROR "Invalid graphics backend for Android. Only OpenGLES3.0 works for now")
     endif()
     target_link_libraries(main EGL)
+    target_link_libraries(main mediandk) # EncxdedCanvas: MP4 export (MediaCodec/MediaMuxer)
 endif()
 
 if(GRAPHICS_BACKEND STREQUAL "Vulkan")

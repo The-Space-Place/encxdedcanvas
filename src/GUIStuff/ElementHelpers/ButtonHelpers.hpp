@@ -43,6 +43,8 @@ struct TextButtonOptions {
     bool wide = false;
     bool growHeight = false;
     bool centered = true;
+    bool bold = false;
+    float textScale = 1.0f;
 
     std::function<void()> onClick;
     std::function<void(SelectableButton*)> onClickButton;

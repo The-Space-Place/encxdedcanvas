@@ -23,6 +23,7 @@
 #include "Helpers/FileDownloader.hpp"
 #include "Screens/CanvasEditorScreen.hpp"
 #include "Screens/FileSelectScreen.hpp"
+#include "Encxded/MainMenuScreen.hpp"
 #include "VersionConstants.hpp"
 #include "include/gpu/GpuTypes.h"
 #include <SDL3/SDL_filesystem.h>
@@ -589,7 +590,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
         resize_window(mS);
 
         if(mS.m->conf.mobileUI)
-            mS.m->set_first_screen(std::make_unique<FileSelectScreen>(*mS.m));
+            mS.m->set_first_screen(std::make_unique<Encxded::MainMenuScreen>(*mS.m)); // EncxdedCanvas: main menu replaces FileSelectScreen
         else {
             std::vector<std::shared_ptr<World>> initWorlds;
             for(std::filesystem::path& f : listOfFilesToOpenFromCommand) {

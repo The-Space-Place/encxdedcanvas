@@ -28,6 +28,18 @@ void text_label_size(GUIManager& gui, std::string_view val, float modifier) {
     CLAY_TEXT(gui.strArena.std_str_to_clay_str(val), CLAY_TEXT_CONFIG({.textColor = convert_vec4<Clay_Color>(gui.io.theme->frontColor1), .fontSize = static_cast<uint16_t>(gui.io.fontSize * modifier)}));
 }
 
+void text_label_styled(GUIManager& gui, std::string_view val, uint16_t fontId, float modifier) {
+    CLAY_TEXT(gui.strArena.std_str_to_clay_str(val), CLAY_TEXT_CONFIG({.textColor = convert_vec4<Clay_Color>(gui.io.theme->frontColor1), .fontId = fontId, .fontSize = static_cast<uint16_t>(gui.io.fontSize * modifier)}));
+}
+
+void text_label_bold(GUIManager& gui, std::string_view val) {
+    CLAY_TEXT(gui.strArena.std_str_to_clay_str(val), CLAY_TEXT_CONFIG({.textColor = convert_vec4<Clay_Color>(gui.io.theme->frontColor1), .fontId = GUI_FONT_BOLD, .fontSize = gui.io.fontSize }));
+}
+
+void text_label_heading(GUIManager& gui, std::string_view val, float modifier) {
+    CLAY_TEXT(gui.strArena.std_str_to_clay_str(val), CLAY_TEXT_CONFIG({.textColor = convert_vec4<Clay_Color>(gui.io.theme->frontColor1), .fontId = GUI_FONT_EXTRA_BOLD, .fontSize = static_cast<uint16_t>(gui.io.fontSize * modifier)}));
+}
+
 void text_label_color(GUIManager& gui, std::string_view val, const SkColor4f& color) {
     CLAY_TEXT(gui.strArena.std_str_to_clay_str(val), CLAY_TEXT_CONFIG({.textColor = convert_vec4<Clay_Color>(color), .fontSize = gui.io.fontSize }));
 }

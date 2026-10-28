@@ -37,6 +37,10 @@ class GUIManager {
 
         GUIManager();
         void draw(SkCanvas* c, bool skiaAA);
+
+        // EncxdedCanvas (recordings): while tracking, the part of io.surface redrawn since the last take, in surface pixels
+        bool trackRedrawnArea = false;
+        std::optional<SCollision::AABB<float>> take_redrawn_area();
         void draw_force(SkCanvas* canvas, bool skiaAA);
         void set_to_layout();
         void layout_if_necessary();
@@ -115,6 +119,9 @@ class GUIManager {
 
         void deselect_all();
 
+        // EncxdedCanvas: set while something (e.g. a kanban card) is being dragged, so scroll areas don't scroll with the finger
+        bool pointerDragCapture = false;
+
         DefaultStringArena strArena;
 
         void input_paste_callback(const CustomEvents::PasteEvent& paste);
@@ -176,6 +183,7 @@ class GUIManager {
         Clay_RenderCommandArray renderCommands;
         std::unordered_map<uint32_t, Clay_RenderCommand> oldRenderCommandMap;
         std::optional<SCollision::AABB<float>> invalidDrawBB;
+        std::optional<SCollision::AABB<float>> redrawnArea; // EncxdedCanvas, see take_redrawn_area
 
         SCollision::AABB<float> get_invalid_draw_bb(SCollision::AABB<float> bb, const BorderData& extraPadding = {});
         SCollision::AABB<float> get_invalid_draw_bb_from_command(const Clay_RenderCommand* command);

@@ -67,6 +67,10 @@ class NetServer : public std::enable_shared_from_this<NetServer> {
             std::atomic<bool> setToDisconnect = false;
             std::chrono::steady_clock::time_point lastMessageTime;
 
+            // EncxdedCanvas: set for a recording client. Its outgoing messages (with message order attached, exactly as a
+            // network client would receive them) go here instead of to a connection, and it never times out.
+            std::function<void(const std::string& channel, std::string&& data)> recordingSink;
+
             friend class NetServer;
             friend class NetClient;
         };
@@ -107,6 +111,12 @@ class NetServer : public std::enable_shared_from_this<NetServer> {
         void add_disconnect_callback(const NetServerDisconnectCallback& callback);
 
         const std::vector<std::shared_ptr<ClientData>>& get_client_list() const;
+
+        // EncxdedCanvas: recording clients (see ClientData::recordingSink). They receive every broadcast like a real client.
+        std::shared_ptr<ClientData> add_recording_client(const std::function<void(const std::string& channel, std::string&& data)>& sink);
+        void remove_recording_client(const std::shared_ptr<ClientData>& client);
+        bool has_network_clients() const; // Any client that isn't a recording client
+        bool move_recording_clients_to(NetServer& other); // Returns true if there were any
 
     private:
         void parse_received_messages();

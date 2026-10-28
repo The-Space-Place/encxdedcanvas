@@ -17,6 +17,7 @@
  */
 
 #include "World.hpp"
+#include "BackgroundGrid.hpp"
 #include <Helpers/HsvRgb.hpp>
 #include <Helpers/MathExtras.hpp>
 #include <Helpers/Networking/ByteStream.hpp>
@@ -86,7 +87,7 @@ World::World(MainProgram& initMain, const CustomEvents::OpenInfiniPaintFileEvent
     drawData.cam.set_viewing_area(main.window.size.cast<float>());
 
     if(worldInfo.isClient)
-        init_client(worldInfo.netSource);
+        init_client(worldInfo.netSource, worldInfo.isReplay);
     else {
         init_client_data_list();
         set_name(name);
@@ -163,12 +164,17 @@ void World::init_net_obj_type_list() {
 #endif
 }
 
-void World::init_client(const std::string& serverFullID) {
-    main.init_net_library();
+void World::init_client(const std::string& serverFullID, bool replay) {
+    isReplay = replay;
     clientStillConnecting = true;
-    netClient = std::make_shared<NetClient>(serverFullID);
+    if(replay) // EncxdedCanvas: fed from a recording, no network involved
+        netClient = std::make_shared<NetClient>(NetClient::ReplayTag{});
+    else {
+        main.init_net_library();
+        netClient = std::make_shared<NetClient>(serverFullID);
+        NetLibrary::register_client(netClient);
+    }
     lastKeepAliveSent = std::chrono::steady_clock::now();
-    NetLibrary::register_client(netClient);
     netObjMan.set_client(netClient, SERVER_UPDATE_NETWORK_OBJECT);
     set_name("");
 
@@ -237,7 +243,59 @@ void World::focus_update() {
 }
 
 bool World::is_connected() {
-    return (netServer && !netServer->is_disconnected()) || (netClient && !netClient->is_disconnected());
+    return (netServer && !netServer->is_disconnected()) || (netClient && !netClient->is_disconnected() && !isReplay);
+}
+
+NetServer* World::broadcast_server() {
+    return netServer ? netServer.get() : recordServer.get();
+}
+
+std::shared_ptr<NetServer::ClientData> World::start_recording_client(const std::function<void(const std::string& channel, std::string&& data)>& sink) {
+    if(netClient || clientStillConnecting)
+        return nullptr; // Only the canvas owner's state is authoritative
+    if(!netServer && !recordServer) {
+        recordServer = std::make_shared<NetServer>("recording");
+        netObjMan.set_server(recordServer, CLIENT_UPDATE_NETWORK_OBJECT);
+    }
+    NetServer* server = broadcast_server();
+    std::shared_ptr<NetServer::ClientData> client = server->add_recording_client(sink);
+
+    // Same initial state a joining client gets (see start_hosting), except that the replay takes the host's own ClientData
+    // instead of a new one, so no extra player or cursor appears here and the replay sees what the host saw
+    auto ss(std::make_shared<std::stringstream>());
+    {
+        cereal::PortableBinaryOutputArchive a(*ss);
+        a(CLIENT_INITIAL_DATA, name, serverClientData.get_net_id(), serverClientData.get_net_id());
+        clients.write_create_message(a);
+        bMan.bookmarkListRoot.write_create_message(a);
+        gridMan.grids.write_create_message(a);
+        drawProg.write_components_server(a);
+        canvasTheme.write_create_message(a);
+        #ifdef ENABLE_ORDERED_LIST_TEST
+            listDebugTest.write_create_message(a);
+        #endif
+    }
+    server->send_string_stream_to_client(client, RELIABLE_COMMAND_CHANNEL, ss);
+    for(auto& r : rMan.resource_list()) {
+        server->send_items_to_client(client, RESOURCE_COMMAND_CHANNEL, CLIENT_NEW_RESOURCE_ID, r.get_net_id());
+        server->send_items_to_client(client, RESOURCE_COMMAND_CHANNEL, CLIENT_NEW_RESOURCE_DATA, *r);
+    }
+    return client;
+}
+
+void World::stop_recording_client(const std::shared_ptr<NetServer::ClientData>& client) {
+    if(!client)
+        return;
+    if(netServer)
+        netServer->remove_recording_client(client);
+    if(recordServer) {
+        recordServer->remove_recording_client(client);
+        if(recordServer->get_client_list().empty()) {
+            if(!netServer)
+                netObjMan.disconnect();
+            recordServer = nullptr;
+        }
+    }
 }
 
 bool World::connection_update() {
@@ -245,8 +303,15 @@ bool World::connection_update() {
         if(netServer->is_disconnected()) {
             Logger::get().log(Logger::LogType::USERINFO, "Host connection failed");
             netSource.clear();
+            // EncxdedCanvas: recordings carry on through a private server
+            std::shared_ptr<NetServer> carrier = std::make_shared<NetServer>("recording");
+            if(netServer->move_recording_clients_to(*carrier)) {
+                recordServer = carrier;
+                netObjMan.set_server(recordServer, CLIENT_UPDATE_NETWORK_OBJECT);
+            }
+            else
+                netObjMan.disconnect();
             netServer = nullptr;
-            netObjMan.disconnect();
         }
         else {
             netServer->update();
@@ -269,6 +334,8 @@ bool World::connection_update() {
             lastKeepAliveSent = std::chrono::steady_clock::now();
         }
     }
+    if(recordServer) // EncxdedCanvas: flushes recording clients
+        recordServer->update();
     return true;
 }
 
@@ -465,6 +532,10 @@ void World::start_hosting(const std::string& initNetSource, const std::string& s
     lastKeepAliveSent = std::chrono::steady_clock::now();
     NetLibrary::register_server(netServer);
     netObjMan.set_server(netServer, CLIENT_UPDATE_NETWORK_OBJECT);
+    if(recordServer) { // EncxdedCanvas: an ongoing recording moves to the hosting server
+        recordServer->move_recording_clients_to(*netServer);
+        recordServer = nullptr;
+    }
     netSource = initNetSource;
     rMan.init_server_callbacks();
     drawProg.init_server_callbacks();
@@ -753,8 +824,10 @@ void World::list_debug_test_update() {
 
 void World::draw(SkCanvas* canvas, const DrawData& calledDrawData) {
     if(!clientStillConnecting) {
-        if(calledDrawData.drawGrids)
+        if(calledDrawData.drawGrids) {
+            draw_background_grid(*this, canvas, calledDrawData);
             gridMan.draw_back(canvas, calledDrawData);
+        }
         drawProg.draw(canvas, calledDrawData);
         if(calledDrawData.drawGrids) {
             gridMan.draw_front(canvas, calledDrawData);

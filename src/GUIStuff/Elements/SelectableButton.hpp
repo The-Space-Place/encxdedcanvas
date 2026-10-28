@@ -27,7 +27,8 @@ class SelectableButton : public Element {
             TRANSPARENT_ALL,
             FILLED,
             FILLED_INVERSE,
-            TRANSPARENT_BORDER
+            TRANSPARENT_BORDER,
+            SWATCH // No padding or highlight fill; content fills the button, selection shown as an outline
         };
 
         struct InnerContentCallbackParameters {

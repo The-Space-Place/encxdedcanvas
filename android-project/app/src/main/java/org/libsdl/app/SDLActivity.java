@@ -2096,6 +2096,11 @@ public abstract class SDLActivity extends Activity implements View.OnSystemUiVis
         Intent intent = new Intent(forWrite ? Intent.ACTION_CREATE_DOCUMENT : Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, allowMultiple);
+        // EncxdedCanvas: suggested file name for save dialogs (set from native code just before showing the dialog)
+        if (forWrite && mSaveDialogSuggestedName != null) {
+            intent.putExtra(Intent.EXTRA_TITLE, mSaveDialogSuggestedName);
+        }
+        mSaveDialogSuggestedName = null;
         switch (mimes.size()) {
             case 0:
                 intent.setType("*/*");
@@ -2120,6 +2125,16 @@ public abstract class SDLActivity extends Activity implements View.OnSystemUiVis
         mFileDialogState.requestCode = requestCode;
         mFileDialogState.multipleChoice = allowMultiple;
         return true;
+    }
+
+    // EncxdedCanvas: used by the next save dialog only
+    static String mSaveDialogSuggestedName = null;
+
+    /**
+     * EncxdedCanvas: called by native code using JNI before SDL_ShowSaveFileDialog.
+     */
+    public static void setSaveDialogSuggestedName(String name) {
+        mSaveDialogSuggestedName = name;
     }
 
     /* Internal class used to track active open file dialog */

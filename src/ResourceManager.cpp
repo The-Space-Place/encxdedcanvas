@@ -139,9 +139,9 @@ const NetworkingObjects::NetObjOwnerPtr<ResourceData>& ResourceManager::add_reso
         return *it;
     }
     auto& resourceInsert = resourceList.emplace_back(world.netObjMan.make_obj_direct<ResourceData>(resource));
-    if(world.netServer) {
-        world.netServer->send_items_to_all_clients(RESOURCE_COMMAND_CHANNEL, SERVER_NEW_RESOURCE_ID, resourceInsert.get_net_id());
-        world.netServer->send_items_to_all_clients(RESOURCE_COMMAND_CHANNEL, SERVER_NEW_RESOURCE_DATA, resource);
+    if(NetServer* server = world.broadcast_server()) { // EncxdedCanvas: also reaches recordings
+        server->send_items_to_all_clients(RESOURCE_COMMAND_CHANNEL, SERVER_NEW_RESOURCE_ID, resourceInsert.get_net_id());
+        server->send_items_to_all_clients(RESOURCE_COMMAND_CHANNEL, SERVER_NEW_RESOURCE_DATA, resource);
     }
     else if(world.netClient) {
         world.netClient->send_items_to_server(RESOURCE_COMMAND_CHANNEL, SERVER_NEW_RESOURCE_ID, resourceInsert.get_net_id());

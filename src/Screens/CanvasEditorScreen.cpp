@@ -31,6 +31,8 @@
 #include "../GUIStuff/ElementHelpers/TextBoxHelpers.hpp"
 #include "../GUIStuff/Elements/RotateWheel.hpp"
 #include "FileSelectScreen.hpp"
+#include "../Encxded/MainMenuScreen.hpp"
+#include "../Encxded/EncxdedApp.hpp"
 #include "../NetThreadManager.hpp"
 #include <Helpers/Logger.hpp>
 #ifdef __EMSCRIPTEN__
@@ -61,6 +63,21 @@ void CanvasEditorScreen::update() {
         return false;
     });
     chatGUI.update();
+    tool_cluster_update();
+    Encxded::app(main).update(); // EncxdedCanvas: session timer and menu data saving
+    if(recorder) { // EncxdedCanvas
+        recorder->update();
+        int64_t second = recorder->elapsed_ns() / 1000000000LL;
+        if(second != recordingShownSecond) {
+            recordingShownSecond = second;
+            main.g.gui.set_to_layout();
+        }
+    }
+    if(world->drawProg.exportModeExitedByTap) {
+        world->drawProg.exportModeExitedByTap = false;
+        if(settingsMenuPopup == SettingsMenuPopup::SETTINGS)
+            set_settings_menu_popup_mode_with_color_picker_data(SettingsMenuPopup::NONE);
+    }
     CanvasScreen::update();
 }
 
@@ -166,9 +183,7 @@ void CanvasEditorScreen::main_display() {
                 hidden_gui();
             else {
                 topToolbar.layout_top_toolbar();
-                CLAY_AUTO_ID({
-                    .layout = {.sizing = {.width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_GROW(0)}}
-                }) {}
+                tool_cluster(); // EncxdedCanvas: grows to fill the space between the top and bottom bars
                 bottom_toolbar();
             }
             if(!world->drawProg.layerMan.is_a_layer_being_edited())
@@ -177,23 +192,33 @@ void CanvasEditorScreen::main_display() {
     }
     if(!world->clientStillConnecting)
         world->drawProg.right_click_popup_gui();
+    recording_pill(); // EncxdedCanvas
+    Encxded::app(main).overlay_layout(); // EncxdedCanvas: sessions popup and floating timer pill
 }
 
 void CanvasEditorScreen::hidden_gui() {
     auto& gui = main.g.gui;
 
+    // EncxdedCanvas: same tile, size and top-left position as the back button, so it doesn't jump around
     window_fill_side_bar(gui, WindowFillSideBarConfig{
         .dir = WindowFillSideBarConfig::Direction::TOP
     }, [&] {
         CLAY_AUTO_ID({
-            .layout = {.sizing = {.width = CLAY_SIZING_GROW(0)}}
-        });
-        svg_icon_button(gui, "show gui button", "data/icons/eyeopen.svg", {
-            .isSelected = true,
-            .onClick = [&] {
-                main.hideInterface = false;
+            .layout = {
+                .sizing = {.width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_FIT(0)},
+                .padding = CLAY_PADDING_ALL(gui.io.theme->padding1)
             }
-        });
+        }) {
+            tool_cluster_row("show gui tile", [&] {
+                svg_icon_button(gui, "show gui button", "data/icons/eyeclose.svg", {
+                    .drawType = SelectableButton::DrawType::TRANSPARENT_ALL,
+                    .size = 36.0f,
+                    .onClick = [&] {
+                        main.hideInterface = false;
+                    }
+                });
+            });
+        }
     });
 }
 
@@ -213,8 +238,22 @@ void CanvasEditorScreen::bottom_toolbar() {
         }) {
             if(world->drawProg.phone_gui_tool_specific_bottom_toolbar_exists())
                 world->drawProg.phone_gui_tool_specific_bottom_toolbar(*this);
-            else
-                default_bottom_toolbar();
+            else if(main.conf.guiOptions.showToolbarRotateWheel || world->is_connected()) {
+                // EncxdedCanvas: tools, sizes and colors moved to the top-left cluster; only the extras remain here.
+                CLAY_AUTO_ID({.layout = {.sizing = {.width = CLAY_SIZING_GROW(0)}}}) {}
+                gui.element<LayoutElement>("bottom extra toolbar", [&](LayoutElement*, const Clay_ElementId& lId) {
+                    CLAY(lId, {
+                        .layout = {
+                            .sizing = {.width = CLAY_SIZING_FIT(0), .height = CLAY_SIZING_FIT(0)},
+                            .layoutDirection = CLAY_LEFT_TO_RIGHT
+                        },
+                        .backgroundColor = convert_vec4<Clay_Color>(io.theme->backColor1),
+                        .cornerRadius = CLAY_CORNER_RADIUS(io.theme->windowCorners1)
+                    }) {
+                        bottom_extra_toolbar_gui();
+                    }
+                });
+            }
             chatGUI.layout({10, 0}, {.element = CLAY_ATTACH_POINT_LEFT_BOTTOM, .parent = CLAY_ATTACH_POINT_LEFT_TOP});
         }
     });
@@ -572,7 +611,7 @@ void CanvasEditorScreen::color_settings_popup(Vector4f* color, const ColorSelect
                         colorPickerPopupData.screenType = ColorPickerPopupData::ScreenType::EXTRA;
                     }
                 });
-                text_label(gui, "Palettes");
+                text_label_heading(gui, "Palettes");
             }
 
             gui.element<TreeListing>("palette list", TreeListing::Data{
@@ -713,37 +752,7 @@ void CanvasEditorScreen::bottom_extra_toolbar_gui() {
         }
     }
 
-    svg_icon_button(gui, "tool settings", "data/icons/RemixIcon/settings-3-line.svg", {
-        .drawType = SelectableButton::DrawType::TRANSPARENT_ALL,
-        .isSelected = settingsMenuPopup == SettingsMenuPopup::SETTINGS,
-        .onClick = [&] {
-            set_settings_menu_popup_mode_with_color_picker_data((settingsMenuPopup == SettingsMenuPopup::SETTINGS) ? SettingsMenuPopup::NONE : SettingsMenuPopup::SETTINGS);
-        }
-    });
-
-    color_button(gui, "foreground color", &main.toolConfig.globalConf.foregroundColor, {
-        .drawType = SelectableButton::DrawType::TRANSPARENT_ALL,
-        .isSelected = settingsMenuPopup == SettingsMenuPopup::COLOR_CHANGE && colorPickerPtr == &main.toolConfig.globalConf.foregroundColor,
-        .hasAlpha = true,
-        .onClick = [&] {
-            if(settingsMenuPopup == SettingsMenuPopup::COLOR_CHANGE && colorPickerPtr == &main.toolConfig.globalConf.foregroundColor)
-                set_settings_menu_popup_mode_with_color_picker_data(SettingsMenuPopup::NONE);
-            else
-                set_settings_menu_popup_mode_with_color_picker_data(SettingsMenuPopup::COLOR_CHANGE, &main.toolConfig.globalConf.foregroundColor);
-        }
-    });
-
-    color_button(gui, "background color", &main.toolConfig.globalConf.backgroundColor, {
-        .drawType = SelectableButton::DrawType::TRANSPARENT_ALL,
-        .isSelected = settingsMenuPopup == SettingsMenuPopup::COLOR_CHANGE && colorPickerPtr == &main.toolConfig.globalConf.backgroundColor,
-        .hasAlpha = true,
-        .onClick = [&] {
-            if(settingsMenuPopup == SettingsMenuPopup::COLOR_CHANGE && colorPickerPtr == &main.toolConfig.globalConf.backgroundColor)
-                set_settings_menu_popup_mode_with_color_picker_data(SettingsMenuPopup::NONE, nullptr);
-            else
-                set_settings_menu_popup_mode_with_color_picker_data(SettingsMenuPopup::COLOR_CHANGE, &main.toolConfig.globalConf.backgroundColor);
-        }
-    });
+    // EncxdedCanvas: foreground/background swatches removed (the quick colors in the tool cluster replace them)
 
     if(world->is_connected()) {
         svg_icon_button(gui, "toggle chat box button", "data/icons/chat.svg", {
@@ -757,13 +766,15 @@ void CanvasEditorScreen::bottom_extra_toolbar_gui() {
 }
 
 void CanvasEditorScreen::input_global_back_button_callback() {
-    if(main.hideInterface) {
+    if(Encxded::app(main).input_global_back_button()) // EncxdedCanvas: closes the sessions popup first
+        main.g.gui.set_to_layout();
+    else if(main.hideInterface) {
         main.hideInterface = false;
         main.g.gui.set_to_layout();
     }
     else if(mobileUI) {
         mobile_save_file();
-        main.set_screen([&] (std::unique_ptr<Screen>) { return std::make_unique<FileSelectScreen>(main); });
+        main.set_screen([&] (std::unique_ptr<Screen>) { return std::make_unique<Encxded::MainMenuScreen>(main); }); // EncxdedCanvas
         main.g.gui.set_to_layout();
     }
 }
@@ -846,6 +857,8 @@ void CanvasEditorScreen::input_window_resize_callback(const InputManager::Window
 
 void CanvasEditorScreen::post_callback() {
     if(!tabsToClose.empty()) {
+        if(recorder && tabsToClose.contains(const_cast<World*>(recorder->recorded_world()))) // EncxdedCanvas
+            stop_recording(false);
         std::erase_if(worlds, [&](auto& w) {
             if(tabsToClose.contains(w.get())) {
                 if(w == world)
@@ -856,7 +869,7 @@ void CanvasEditorScreen::post_callback() {
         });
         tabsToClose.clear();
         if(mobileUI)
-            main.set_screen([&] (std::unique_ptr<Screen>) { return std::make_unique<FileSelectScreen>(main); });
+            main.set_screen([&] (std::unique_ptr<Screen>) { return std::make_unique<Encxded::MainMenuScreen>(main); }); // EncxdedCanvas
         else {
             if(worlds.empty())
                 create_new_tab({
@@ -870,6 +883,10 @@ void CanvasEditorScreen::post_callback() {
 }
 
 void CanvasEditorScreen::input_app_about_to_go_to_background_callback() {
+    if(recorder) { // EncxdedCanvas: background time is cut from recordings; the user resumes with the pill
+        recorder->set_paused(true);
+        main.g.gui.set_to_layout();
+    }
     if(mobileUI)
         mobile_save_file();
 }
@@ -935,6 +952,8 @@ void CanvasEditorScreen::input_open_infinipaint_file_callback(const CustomEvents
 }
 
 void CanvasEditorScreen::switch_to_tab(size_t wIndex) {
+    if(recorder && worlds[wIndex] != world) // EncxdedCanvas: leaving the recorded canvas ends the recording
+        stop_recording(false);
     world = worlds[wIndex];
 }
 
@@ -962,6 +981,7 @@ size_t CanvasEditorScreen::open_world_count() {
 }
 
 CanvasEditorScreen::~CanvasEditorScreen() {
+    stop_recording(false); // EncxdedCanvas: leaving the canvas saves the recording
 #ifndef __ANDROID__
     if(mobileUI)
         mobile_save_file();

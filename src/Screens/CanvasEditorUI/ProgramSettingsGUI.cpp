@@ -26,6 +26,10 @@
 #include "../../GUIStuff/ElementHelpers/CheckBoxHelpers.hpp"
 #include "../../GUIStuff/ElementHelpers/NumberSliderHelpers.hpp"
 #include "../../GUIStuff/ElementHelpers/RadioButtonHelpers.hpp"
+#include "../../GUIStuff/ElementHelpers/ButtonHelpers.hpp"
+#include "../../GUIStuff/ElementHelpers/TextLabelHelpers.hpp"
+#include "../../GUIStuff/ElementHelpers/TextBoxHelpers.hpp"
+#include <format>
 #include "../../World.hpp"
 #include "Helpers/ConvertVec.hpp"
 #include "../../ResourceDisplay/ImageResourceDisplay.hpp"
@@ -45,6 +49,57 @@ using namespace ElementHelpers;
 
 void ProgramSettingsGUI::on_settings_open() {
     keybindWaiting = std::nullopt;
+    editingSizePreset = std::nullopt;
+}
+
+// Same look as the size row in the canvas tool cluster. Tapping a size opens an editor for it below the row.
+void ProgramSettingsGUI::size_presets_editor(MainProgram& main, const char* id, const char* title, std::array<float, 6>& presets, int presetListIndex) {
+    auto& gui = main.g.gui;
+    auto& io = gui.io;
+    constexpr float CELL_SIZE = 36.0f;
+
+    gui.new_id(id, [&] {
+        text_label_heading(gui, title);
+        gui.element<LayoutElement>("presets row", [&](LayoutElement*, const Clay_ElementId& lId) {
+            CLAY(lId, {
+                .layout = {
+                    .sizing = {.width = CLAY_SIZING_FIT(0), .height = CLAY_SIZING_FIT(0)},
+                    .padding = CLAY_PADDING_ALL(2),
+                    .childGap = 2,
+                    .childAlignment = {.x = CLAY_ALIGN_X_LEFT, .y = CLAY_ALIGN_Y_CENTER},
+                    .layoutDirection = CLAY_LEFT_TO_RIGHT
+                },
+                .backgroundColor = convert_vec4<Clay_Color>(io.theme->backColor2),
+                .cornerRadius = CLAY_CORNER_RADIUS(io.theme->windowCorners1)
+            }) {
+                for(size_t i = 0; i < presets.size(); i++) {
+                    gui.new_id(i, [&] {
+                        bool isEditing = editingSizePreset && editingSizePreset->presetListIndex == presetListIndex && editingSizePreset->presetIndex == i;
+                        text_button_sized(gui, "preset", std::format("{:g}", presets[i]), CLAY_SIZING_FIXED(CELL_SIZE), CLAY_SIZING_FIXED(CELL_SIZE), {
+                            .drawType = SelectableButton::DrawType::TRANSPARENT_ALL,
+                            .isSelected = isEditing,
+                            .bold = true,
+                            .onClick = [&, i, isEditing, presetListIndex] {
+                                if(isEditing)
+                                    editingSizePreset = std::nullopt;
+                                else
+                                    editingSizePreset = EditingSizePreset{presetListIndex, i};
+                            }
+                        });
+                    });
+                }
+            }
+        });
+        if(editingSizePreset && editingSizePreset->presetListIndex == presetListIndex) {
+            float* val = &presets[editingSizePreset->presetIndex];
+            input_scalar_field<float>(gui, "preset value", "Size", val, 0.1f, 1000.0f, {
+                .decimalPrecision = 1,
+                .onEdit = [val] {
+                    *val = std::round(*val * 10.0f) / 10.0f; // Nearest tenth
+                }
+            });
+        }
+    });
 }
 
 void ProgramSettingsGUI::top_tabs_layout(MainProgram& main) {
@@ -131,6 +186,7 @@ void ProgramSettingsGUI::tabs_layout(MainProgram& main, bool wideButtons) {
     category_button("General", SettingsMenu::GENERAL);
     category_button("Graphics", SettingsMenu::GRAPHICS);
     category_button("Interface", SettingsMenu::INTERFACE);
+    category_button("Tools", SettingsMenu::TOOLS);
     category_button("Pen", SettingsMenu::PEN);
     category_button("Touch", SettingsMenu::TOUCH);
     category_button("Theme", SettingsMenu::THEME);
@@ -191,9 +247,16 @@ void ProgramSettingsGUI::inner_layout(MainProgram& main, float maxWidth, bool mo
                 #endif
                 break;
             }
+            case SettingsMenu::TOOLS: {
+                size_presets_editor(main, "pen size presets", "Pen Sizes", main.toolConfig.globalConf.penSizePresets, 0);
+                size_presets_editor(main, "highlighter size presets", "Highlighter Sizes", main.toolConfig.globalConf.highlighterSizePresets, 1);
+                text_label_heading(gui, "Highlighter");
+                slider_scalar_field(gui, "highlighter opacity", "Opacity", &main.toolConfig.highlighter.opacity, 0.05f, 1.0f, {.decimalPrecision = 2});
+                break;
+            }
             case SettingsMenu::INTERFACE: {
                 left_to_right_line_layout(gui, [&] {
-                    text_label(gui, "GUI Scale");
+                    text_label_heading(gui, "GUI Scale");
                     CLAY_AUTO_ID({.layout = {.sizing = {.width = CLAY_SIZING_GROW(0)}}}) {}
                     svg_icon_button(gui, "subtract gui scale", "data/icons/minus.svg", {
                         .size = SMALL_BUTTON_SIZE,
@@ -263,6 +326,7 @@ void ProgramSettingsGUI::inner_layout(MainProgram& main, float maxWidth, bool mo
                 input_scalar_field<uint8_t>(gui, "right click", "Right click pen button", &main.conf.tabletOptions.rightClickButton, 1, 255);
                 slider_scalar_field(gui, "tablet brush minimum size", "Brush relative minimum size", &main.conf.tabletOptions.brushMinimumSize, 0.0f, 1.0f, {.decimalPrecision = 3});
                 slider_scalar_field(gui, "tablet brush pressure smoothing factor", "Brush pressure smoothing factor", &main.conf.tabletOptions.brushPressureSmoothingFactor, 0.0f, 1.0f, {.decimalPrecision = 3});
+                slider_scalar_field(gui, "tablet brush pressure curve", "Pressure curve (firm -1, soft 1; new strokes only)", &main.conf.tabletOptions.brushPressureCurve, -1.0f, 1.0f, {.decimalPrecision = 2});
                 checkbox_boolean_field(gui, "tablet zoom with button method", "Zoom when pen touching tablet and pen button assigned to middle click is held", &main.conf.tabletOptions.zoomWhilePenDownAndButtonHeld);
                 #ifdef _WIN32
                     checkbox_boolean_field(gui, "mouse ignore when pen proximity", "Ignore mouse movement when pen in proximity", &main.conf.tabletOptions.ignoreMouseMovementWhenPenInProximity);
@@ -277,9 +341,9 @@ void ProgramSettingsGUI::inner_layout(MainProgram& main, float maxWidth, bool mo
                     {"Pan", GlobalConfig::TouchOptions::SingleFingerAction::PAN},
                     {"Lasso Select", GlobalConfig::TouchOptions::SingleFingerAction::LASSO}
                 };
-                text_label(gui, "Finger action");
+                text_label_heading(gui, "Finger action");
                 radio_button_selector(gui, "Finger action options", &main.conf.touchOptions.singleFingerAction, singleFingerOptions);
-                text_label(gui, "Two finger move");
+                text_label_heading(gui, "Two finger move");
                 checkbox_boolean_field(gui, "two finger rotation", "Enable canvas rotation", &main.conf.touchOptions.twoFingerRotation);
                 checkbox_boolean_field(gui, "two finger rotation snap", "Snap rotation to common angles", &main.conf.touchOptions.twoFingerSnapRotation);
                 checkbox_boolean_field(gui, "two finger zoom", "Enable canvas zoom", &main.conf.touchOptions.twoFingerZoom);
@@ -289,11 +353,11 @@ void ProgramSettingsGUI::inner_layout(MainProgram& main, float maxWidth, bool mo
                     {"Redo", GlobalConfig::TouchOptions::MultiFingerTapAction::REDO},
                     {"Toggle Interface", GlobalConfig::TouchOptions::MultiFingerTapAction::TOGGLE_INTERFACE}
                 };
-                text_label(gui, "Two finger tap");
+                text_label_heading(gui, "Two finger tap");
                 radio_button_selector(gui, "Two finger tap options", &main.conf.touchOptions.twoFingerTapAction, multiFingerTapOptions);
-                text_label(gui, "Three finger tap");
+                text_label_heading(gui, "Three finger tap");
                 radio_button_selector(gui, "Three finger tap options", &main.conf.touchOptions.threeFingerTapAction, multiFingerTapOptions);
-                text_label(gui, "Four finger tap");
+                text_label_heading(gui, "Four finger tap");
                 radio_button_selector(gui, "Four finger tap options", &main.conf.touchOptions.fourFingerTapAction, multiFingerTapOptions);
                 break;
             }
@@ -317,7 +381,7 @@ void ProgramSettingsGUI::inner_layout(MainProgram& main, float maxWidth, bool mo
                     });
                 }
                 left_to_right_line_layout(gui, [&]() {
-                    if(themeData.selectedThemeIndex != 0) {
+                    if(themeData.selectedThemeIndex.value() >= GUIStuff::get_built_in_theme_names().size()) {
                         text_button_wide(gui, "savethemebutton", "Save", [&] {
                             main.conf.themeCurrentlyLoaded = themeData.themeDirList[themeData.selectedThemeIndex.value()];
                             main.g.save_theme(main.conf.configPath, main.conf.themeCurrentlyLoaded);
@@ -331,7 +395,7 @@ void ProgramSettingsGUI::inner_layout(MainProgram& main, float maxWidth, bool mo
                         main.conf.themeCurrentlyLoaded = themeData.themeDirList[themeData.selectedThemeIndex.value()];
                         reload_theme_list(main);
                     });
-                    if(themeData.selectedThemeIndex != 0) {
+                    if(themeData.selectedThemeIndex.value() >= GUIStuff::get_built_in_theme_names().size()) {
                         text_button_wide(gui, "deletethemebutton", "Delete", [&] {
                             try { std::filesystem::remove(main.conf.configPath / "themes" / (themeData.themeDirList[themeData.selectedThemeIndex.value()] + ".json")); } catch(...) { }
                             main.conf.themeCurrentlyLoaded = "Default";
@@ -366,6 +430,11 @@ void ProgramSettingsGUI::inner_layout(MainProgram& main, float maxWidth, bool mo
                 theme_color_field("composeColor1", "Compose Color", &io.theme->composeColor);
                 theme_color_field("warningColor", "Warning Color", &io.theme->warningColor);
                 theme_color_field("errorColor", "Error Color", &io.theme->errorColor);
+                theme_color_field("accentColor", "Accent Color", &io.theme->accentColor);
+                theme_color_field("onAccentColor", "Text On Accent", &io.theme->onAccentColor);
+                theme_color_field("pageColor", "Menu Page Color", &io.theme->pageColor);
+                theme_color_field("sidebarColor", "Menu Sidebar Color", &io.theme->sidebarColor);
+                theme_color_field("cardColor", "Menu Card Color", &io.theme->cardColor);
                 //gui.slider_scalar_field("hoverExpandTime", "Hover Expand Time", &io.theme->hoverExpandTime, 0.001f, 1.0f);
                 input_scalar_field<uint16_t>(gui, "childGap1", "Gap between child elements", &io.theme->childGap1, 0, 30);
                 input_scalar_field<uint16_t>(gui, "padding1", "Window padding", &io.theme->padding1, 0, 30);
@@ -457,13 +526,17 @@ void ProgramSettingsGUI::text_button_wide(GUIManager& gui, const char* id, const
 void ProgramSettingsGUI::reload_theme_list(MainProgram& main) {
     themeData.selectedThemeIndex = 0;
 
-    themeData.themeDirList.clear();
-    themeData.themeDirList.emplace_back("Default");
+    // EncxdedCanvas: built-in themes come first, then the user's saved themes
+    themeData.themeDirList = GUIStuff::get_built_in_theme_names();
+    for(size_t i = 0; i < themeData.themeDirList.size(); i++) {
+        if(themeData.themeDirList[i] == main.conf.themeCurrentlyLoaded)
+            themeData.selectedThemeIndex = i;
+    }
     std::filesystem::path themeDir = main.conf.configPath / "themes";
     if(std::filesystem::exists(themeDir) && std::filesystem::is_directory(themeDir)) {
         for(auto& theme : std::filesystem::recursive_directory_iterator(themeDir)) {
             std::string name = theme.path().stem().string();
-            if(name != "Default") {
+            if(name != "Default" && !GUIStuff::get_built_in_theme(name)) {
                 themeData.themeDirList.emplace_back(name);
                 if(name == main.conf.themeCurrentlyLoaded)
                     themeData.selectedThemeIndex = themeData.themeDirList.size() - 1;

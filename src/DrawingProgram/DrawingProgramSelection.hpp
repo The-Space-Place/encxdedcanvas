@@ -17,6 +17,7 @@
  */
 
 #pragma once
+#include <chrono>
 #include "../CoordSpaceHelperTransform.hpp"
 #include "Layers/DrawingProgramLayerManager.hpp"
 #include "DrawingProgramCache.hpp"
@@ -56,21 +57,41 @@ class DrawingProgramSelection {
         void input_mouse_button_on_canvas_callback_modify_selection(const InputManager::MouseButtonCallbackArgs& button);
         void input_mouse_motion_callback_modify_selection(const InputManager::MouseMotionCallbackArgs& motion);
         void cancel_finger_touch_callback(const FingerInput::TouchCallbackArgs& touch);
+        // EncxdedCanvas (recordings): the selected components, and the camera they're drawn with. A drag/scale/rotate in progress is
+        // only local until it's released, so replays need this to show it.
+        std::vector<NetworkingObjects::NetObjID> get_selected_ids() const;
+        CoordSpaceHelper get_selection_draw_camera(const CoordSpaceHelper& cam) const;
     private:
         bool commitChangeColorUpdate = false;
 
         void phone_bottom_toolbar_gui(CanvasEditorScreen& t);
         void translate_key(unsigned keyPressed, bool pressed);
         bool point_collided_with_selection_aabb(const Vector2f& p);
-        bool point_collided_with_scale_point(const Vector2f& p);
         bool point_collided_with_rotate_center_handle_point(const Vector2f& p);
-        bool point_collided_with_rotate_handle_point(const Vector2f& p);
+        // EncxdedCanvas: corner handles. Return the corner index (matching selectionRectPoints), or -1
+        int scale_corner_at(const Vector2f& p);
+        int rotate_corner_at(const Vector2f& p);
+        bool selection_is_small_on_screen();
+
+        // EncxdedCanvas: Scale grows stroke thickness with the size; Stretch keeps it constant
+        enum class ScaleMode { SCALE, STRETCH } scaleMode = ScaleMode::SCALE;
+        // Double-tap a rotate handle to show (and then drag) the rotation anchor; otherwise rotation is about the center
+        bool showRotationAnchor = false;
+        std::chrono::steady_clock::time_point lastRotateHandleTap;
+
+        // Live pen-thickness changes (thickness slider and Stretch mode). The original strokes are captured when the
+        // drag starts, every update re-applies the factor to those originals, and release commits with undo.
+        float thicknessDrag = 0.0f;
+        std::vector<std::pair<CanvasComponentContainer::ObjInfo*, std::unique_ptr<CanvasComponent>>> thicknessOriginals;
+        void thickness_capture_originals();
+        void thickness_apply_factor(float factor);
+        void thickness_restore_originals();
+        void thickness_commit(bool joinPreviousUndo);
 
         bool is_empty_transform();
 
         void commit_transform_selection();
         void rebuild_cam_space();
-        Vector2f get_rotation_point_pos_from_angle(double angle);
 
         void update_selection_stroke_color();
 
@@ -113,13 +134,15 @@ class DrawingProgramSelection {
             WorldVec startPos;
             WorldVec centerPos;
             WorldVec currentPos;
-            Vector2f handlePoint;
+            std::array<Vector2f, 4> cornerHandlePoints;
+            float sizeFactor = 1.0f; // Current size / original size
         } scaleData;
 
         struct RotationData {
             WorldVec centerPos;
             Vector2f centerHandlePoint;
-            Vector2f handlePoint;
+            std::array<Vector2f, 4> cornerHandlePoints;
+            double startAngle = 0.0;
             double rotationAngle = 0.0;
         } rotateData;
 };

@@ -28,7 +28,8 @@ namespace VersionConstants {
     VersionNumber header_to_version_number(const std::string& header); 
 
     constexpr int SAVEFILE_HEADER_LEN = 12; // DO NOT CHANGE THIS HEADER LENGTH
-    const std::string CURRENT_SAVEFILE_HEADER = "INFPNT000006"; // Change whenever the save file is incompatible with the previous version
-    const std::string CURRENT_VERSION_STRING = "0.6.3";
-    constexpr VersionNumber CURRENT_VERSION_NUMBER(0, 6, 3);
+    // EncxdedCanvas files use their own header family (ENCXCV) and versions from 1.0.0; InfiniPaint files (INFPNT) still load
+    const std::string CURRENT_SAVEFILE_HEADER = "ENCXCV000002"; // Change whenever the save file is incompatible with the previous version
+    const std::string CURRENT_VERSION_STRING = "1.0.0";
+    constexpr VersionNumber CURRENT_VERSION_NUMBER(1, 0, 0);
 }

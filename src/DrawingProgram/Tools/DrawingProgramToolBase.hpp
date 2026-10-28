@@ -41,7 +41,8 @@ enum class DrawingProgramToolType : int {
     EDIT,
     ZOOM,
     PAN,
-    LINE
+    LINE,
+    HIGHLIGHTER // EncxdedCanvas: BrushTool in highlighter mode
 };
 
 class DrawingProgramToolBase {

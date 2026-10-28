@@ -93,8 +93,8 @@ void text_button_with_icon(GUIManager& gui, const char* id, const std::string& s
 
 void text_button_sized(GUIManager& gui, const char* id, std::string_view text, Clay_SizingAxis x, Clay_SizingAxis y, const TextButtonOptions& options) {
     SelectableButton::Data d = selectable_button_options_to_data(options);
-    d.innerContent = [&gui, text] (const SelectableButton::InnerContentCallbackParameters&) {
-        text_label(gui, text);
+    d.innerContent = [&gui, text, bold = options.bold, textScale = options.textScale] (const SelectableButton::InnerContentCallbackParameters&) {
+        text_label_styled(gui, text, bold ? GUI_FONT_BOLD : GUI_FONT_REGULAR, textScale);
     };
     CLAY_AUTO_ID({
         .layout = {

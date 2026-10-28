@@ -91,6 +91,11 @@ typedef StringArena<4000000> DefaultStringArena;
 
 SkFont get_setup_skfont();
 
+// Values for Clay_TextElementConfig::fontId, mapped to font weights when text is measured/drawn
+constexpr uint16_t GUI_FONT_REGULAR = 0;
+constexpr uint16_t GUI_FONT_BOLD = 1;
+constexpr uint16_t GUI_FONT_EXTRA_BOLD = 2;
+
 struct Theme {
     SkColor4f fillColor1 = {0.8f, 0.785f, 1.0f, 1.0f};
     SkColor4f fillColor2 = {0.3f, 0.3f, 0.477f, 1.0f};
@@ -104,15 +109,26 @@ struct Theme {
     SkColor4f errorColor = {1.0f, 0.0f, 0.0f, 1.0f};
     SkColor4f warningColor = {1.0f, 1.0f, 0.0f, 1.0f};
 
+    // EncxdedCanvas: main menu surfaces, and the accent used for primary actions, checkmarks and progress
+    SkColor4f accentColor = {0.95f, 0.79f, 0.30f, 1.0f};
+    SkColor4f onAccentColor = {0.11f, 0.14f, 0.19f, 1.0f};
+    SkColor4f pageColor = {0.14f, 0.20f, 0.27f, 1.0f};
+    SkColor4f sidebarColor = {0.11f, 0.14f, 0.19f, 1.0f};
+    SkColor4f cardColor = {0.17f, 0.22f, 0.29f, 1.0f};
+
     float hoverExpandTime = 0.1f;
     uint16_t childGap1 = 10;
     uint16_t padding1 = 8;
     float windowCorners1 = 8;
 
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(Theme, fillColor1, fillColor2, backColor0, backColor1, backColor2, frontColor1, frontColor2, errorColor, warningColor, hoverExpandTime, childGap1, padding1, windowCorners1)
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(Theme, fillColor1, fillColor2, backColor0, backColor1, backColor2, frontColor1, frontColor2, errorColor, warningColor, accentColor, onAccentColor, pageColor, sidebarColor, cardColor, hoverExpandTime, childGap1, padding1, windowCorners1)
 };
 
 std::shared_ptr<Theme> get_default_dark_mode();
+
+// EncxdedCanvas: themes that ship with the app. The first is the default; "Default" in older configs maps to it.
+const std::vector<std::string>& get_built_in_theme_names();
+std::shared_ptr<Theme> get_built_in_theme(const std::string& name); // nullptr if the name isn't built in
 
 struct UpdateInputData {
     InputManager* input = nullptr;

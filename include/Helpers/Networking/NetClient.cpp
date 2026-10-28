@@ -40,6 +40,17 @@ NetClient::NetClient(NetServer& server) {
     lastMessageTime = std::chrono::steady_clock::now();
 }
 
+NetClient::NetClient(ReplayTag) {
+    receiveQueue = std::make_shared<ReceiveQueue>();
+    isReplay = true;
+    lastMessageTime = std::chrono::steady_clock::now();
+}
+
+void NetClient::push_replay_message(const std::string& channel, const std::string& data) {
+    std::scoped_lock rQueueLock(receiveQueue->mut);
+    receiveQueue->messages.emplace(channel, rtc::binary((const std::byte*)data.data(), (const std::byte*)(data.data() + data.size())));
+}
+
 void NetClient::init_channel(const std::string& channelName, std::shared_ptr<rtc::DataChannel> channel) {
     if(isDisconnected)
         return;
@@ -64,7 +75,7 @@ void NetClient::init_channel(const std::string& channelName, std::shared_ptr<rtc
 void NetClient::update() {
     if(isDisconnected)
         return;
-    if(std::chrono::steady_clock::now() - lastMessageTime >= NetLibrary::TIMEOUT_DURATION) {
+    if(!isReplay && std::chrono::steady_clock::now() - lastMessageTime >= NetLibrary::TIMEOUT_DURATION) {
         Logger::get().log(Logger::LogType::INFO, "[NetClient::update] Connection timed out");
         isDisconnected = true;
         return;
@@ -176,6 +187,10 @@ NetLibrary::DownloadProgress NetClient::get_progress_into_fragmented_message(con
 }
 
 void NetClient::send_queued_messages() {
+    if(isReplay) { // EncxdedCanvas: nobody to send to
+        messageQueues.clear();
+        return;
+    }
     for(auto& [channelName, messageQueue] : messageQueues) {
         bool addMessageOrder = NetLibrary::is_ordered_channel(channelName);
         if(directConnectServer) {

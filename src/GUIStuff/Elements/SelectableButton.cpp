@@ -40,21 +40,25 @@ void SelectableButton::layout(const Clay_ElementId& id, const Data& d) {
         else if(d.onClick) d.onClick();
     };
 
-    if(isHeld || ((d.isSelected || isHovering) && d.drawType == DrawType::TRANSPARENT_BORDER))
+    if(d.drawType == DrawType::SWATCH)
+        borderColor = d.isSelected ? io.theme->frontColor1 : (isHovering || isHeld) ? io.theme->fillColor1 : SkColor4f{0.0f, 0.0f, 0.0f, 0.0f};
+    else if(isHeld || ((d.isSelected || isHovering) && d.drawType == DrawType::TRANSPARENT_BORDER))
         borderColor = io.theme->fillColor1;
     else if(d.drawType == DrawType::TRANSPARENT_BORDER)
         borderColor = io.theme->backColor2;
     else
         borderColor = SkColor4f{0.0f, 0.0f, 0.0f, 0.0f};
 
-    if(d.isSelected)
+    if(d.drawType == DrawType::SWATCH)
+        backgroundColorHighlight = {0.0f, 0.0f, 0.0f, 0.0f};
+    else if(d.isSelected)
         backgroundColorHighlight = color_mul_alpha(io.theme->fillColor1, 0.4f);
     else if(isHovering || isHeld)
         backgroundColorHighlight = color_mul_alpha(io.theme->fillColor1, 0.2f);
     else
         backgroundColorHighlight = {0.0f, 0.0f, 0.0f, 0.0f};
 
-    if(d.drawType == DrawType::TRANSPARENT_ALL || d.drawType == DrawType::TRANSPARENT_BORDER)
+    if(d.drawType == DrawType::TRANSPARENT_ALL || d.drawType == DrawType::TRANSPARENT_BORDER || d.drawType == DrawType::SWATCH)
         backgroundColor = {0.0f, 0.0f, 0.0f, 0.0f};
     else if(d.drawType == DrawType::FILLED)
         backgroundColor = io.theme->backColor2;
@@ -75,7 +79,7 @@ void SelectableButton::layout(const Clay_ElementId& id, const Data& d) {
     }) {
         CLAY_AUTO_ID({.layout = { 
                 .sizing = {.width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_GROW(0)},
-                .padding = (d.drawType == DrawType::TRANSPARENT_BORDER) ? CLAY_PADDING_ALL(0) : CLAY_PADDING_ALL(4),
+                .padding = (d.drawType == DrawType::TRANSPARENT_BORDER || d.drawType == DrawType::SWATCH) ? CLAY_PADDING_ALL(0) : CLAY_PADDING_ALL(4),
                 .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER },
             },
             .backgroundColor = convert_vec4<Clay_Color>(backgroundColorHighlight),

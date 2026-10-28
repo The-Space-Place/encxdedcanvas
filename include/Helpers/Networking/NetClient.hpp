@@ -35,6 +35,11 @@ class NetClient : public std::enable_shared_from_this<NetClient> {
     public:
         NetClient(const std::string& serverFullID);
         NetClient(NetServer& server);
+        // EncxdedCanvas: replay client for recordings. Not connected to anything: messages are fed in with push_replay_message,
+        // anything it sends is dropped, and it never times out.
+        struct ReplayTag {};
+        NetClient(ReplayTag);
+        void push_replay_message(const std::string& channel, const std::string& data);
         template <typename... Args> void send_items_to_server(const std::string& channel, Args&&... items) {
             if(isDisconnected)
                 return;
@@ -84,6 +89,7 @@ class NetClient : public std::enable_shared_from_this<NetClient> {
         std::unordered_map<MessageCommandType, NetClientRecvCallback> recvCallbacks;
 
         NetServer* directConnectServer = nullptr;
+        bool isReplay = false; // EncxdedCanvas
         std::atomic<bool> isDisconnected = false;
 
         MessageOrder nextMessageOrderToSend = 0;

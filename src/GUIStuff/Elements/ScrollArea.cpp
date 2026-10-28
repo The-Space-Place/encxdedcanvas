@@ -418,6 +418,10 @@ void ScrollArea::input_finger_touch_callback(const FingerInput::TouchCallbackArg
             }
         }
         case FingerInput::ActionType::MOVE: {
+            if(scrollAreaHeld && gui.pointerDragCapture) {
+                scrollAreaHeld = false;
+                scrollAreaMotion = scrollAreaMotionMax = {0.0f, 0.0f};
+            }
             if(scrollAreaHeld) {
                 scrollAreaMotion = {opts.scrollHorizontal ? touch.action.motion.x() : 0.0f, opts.scrollVertical ? touch.action.motion.y() : 0.0f};
                 if(std::fabs(scrollAreaMotion.x()) > std::fabs(scrollAreaMotionMax.x()))

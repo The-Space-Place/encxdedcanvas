@@ -23,6 +23,9 @@
 #include "../InputManager.hpp"
 #include <Helpers/Parallel.hpp>
 #include <Helpers/Logger.hpp>
+#include "EditCanvasComponentWorldUndoAction.hpp"
+#include "../CanvasComponents/MeshCanvasComponent.hpp"
+#include <numbers>
 
 #ifdef USE_SKIA_BACKEND_GRAPHITE
     #include <include/gpu/graphite/Surface.h>
@@ -45,6 +48,7 @@
 #include "../GUIStuff/ElementHelpers/LayoutHelpers.hpp"
 #include "../GUIStuff/ElementHelpers/ButtonHelpers.hpp"
 #include "../GUIStuff/Elements/ScrollArea.hpp"
+#include "../GUIStuff/Elements/NumberSlider.hpp"
 
 DrawingProgramSelection::DrawingProgramSelection(DrawingProgram& initDrawP):
     drawP(initDrawP)
@@ -98,6 +102,55 @@ void DrawingProgramSelection::phone_selection_bottom_toolbar(CanvasEditorScreen&
         }) {
             if(strokeColorChangeData.guiColorSelectorData.has_value())
                 t.color_settings_popup(&strokeColorChangeData.newColor, strokeColorChangeData.guiColorSelectorData.value(), nullptr);
+        }
+        // EncxdedCanvas: Scale/Stretch mode and the thickness drag-slider
+        CLAY_AUTO_ID({
+            .layout = {
+                .sizing = {.width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_FIT(0) },
+                .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER},
+                .layoutDirection = CLAY_LEFT_TO_RIGHT
+            }
+        }) {
+            gui.element<LayoutElement>("selection transform options", [&](LayoutElement*, const Clay_ElementId& lId) {
+                CLAY(lId, {
+                    .layout = {
+                        .sizing = {.width = CLAY_SIZING_FIT(0), .height = CLAY_SIZING_FIT(0)},
+                        .padding = CLAY_PADDING_ALL(io.theme->padding1),
+                        .childGap = io.theme->childGap1,
+                        .childAlignment = { .y = CLAY_ALIGN_Y_CENTER },
+                        .layoutDirection = CLAY_LEFT_TO_RIGHT
+                    },
+                    .backgroundColor = convert_vec4<Clay_Color>(io.theme->backColor1),
+                    .cornerRadius = CLAY_CORNER_RADIUS(io.theme->windowCorners1)
+                }) {
+                    text_button(gui, "scale mode", "Scale", {
+                        .drawType = SelectableButton::DrawType::TRANSPARENT_BORDER,
+                        .isSelected = scaleMode == ScaleMode::SCALE,
+                        .bold = true,
+                        .onClick = [&] { scaleMode = ScaleMode::SCALE; }
+                    });
+                    text_button(gui, "stretch mode", "Stretch", {
+                        .drawType = SelectableButton::DrawType::TRANSPARENT_BORDER,
+                        .isSelected = scaleMode == ScaleMode::STRETCH,
+                        .bold = true,
+                        .onClick = [&] { scaleMode = ScaleMode::STRETCH; }
+                    });
+                    text_label_bold(gui, "Thickness");
+                    CLAY_AUTO_ID({.layout = {.sizing = {.width = CLAY_SIZING_FIXED(180), .height = CLAY_SIZING_FIT(0)}}}) {
+                        // Runs -1..1 around the middle: full left halves the pen width twice (1/4), full right doubles it twice (4x).
+                        // Exponential, so it never reaches zero. Snaps back to the middle on release for the next drag.
+                        gui.element<NumberSlider<float>>("thickness slider", &thicknessDrag, -1.0f, 1.0f, NumberSliderData{
+                            .onChange = [&] { thickness_apply_factor(std::exp2(thicknessDrag * 2.0f)); },
+                            .onHold = [&] { thickness_capture_originals(); },
+                            .onRelease = [&] {
+                                thickness_commit(false);
+                                thicknessDrag = 0.0f;
+                                calculate_aabb();
+                            }
+                        });
+                    }
+                }
+            });
         }
         CLAY_AUTO_ID({
             .layout = {
@@ -363,7 +416,8 @@ void DrawingProgramSelection::calculate_aabb() {
         initialSelectionAABB = (*selectedSet.begin())->obj->get_world_bounds().value();
         for(auto& c : selectedSet)
             initialSelectionAABB.include_aabb_in_bounds(c->obj->get_world_bounds().value());
-        rotateData.centerPos = initialSelectionAABB.center();
+        if(!showRotationAnchor)
+            rotateData.centerPos = initialSelectionAABB.center();
     }
 }
 
@@ -377,6 +431,9 @@ bool DrawingProgramSelection::is_selected(CanvasComponentContainer::ObjInfo* obj
 
 void DrawingProgramSelection::reset_all() {
     check_add_stroke_color_change_undo();
+    showRotationAnchor = false;
+    thicknessOriginals.clear();
+    thicknessDrag = 0.0f;
     selectedSet.clear();
     reset_transform_data();
     strokeColorChangeData = StrokeColorChangeData();
@@ -389,23 +446,43 @@ void DrawingProgramSelection::reset_transform_data() {
     transformOpHappening = TransformOperation::NONE;
     translateData = TranslationData();
     scaleData = ScaleData();
+    WorldVec keepRotationCenter = rotateData.centerPos; // Custom anchor (if shown) survives between transforms
     rotateData = RotationData();
+    rotateData.centerPos = keepRotationCenter;
 }
 
 bool DrawingProgramSelection::point_collided_with_selection_aabb(const Vector2f& p) {
-    return SCollision::collide(camSpaceSelection, p);
-}
-
-bool DrawingProgramSelection::point_collided_with_scale_point(const Vector2f& p) {
-    return SCollision::collide(SCollision::Circle(scaleData.handlePoint, drawP.drag_point_radius()), p);
+    if(SCollision::collide(camSpaceSelection, p))
+        return true;
+    // Tiny selections get a finger-sized grab area around their center
+    Vector2f center = (scaleData.cornerHandlePoints[0] + scaleData.cornerHandlePoints[2]) * 0.5f;
+    return selection_is_small_on_screen() && (p - center).norm() < drawP.drag_point_radius() * 2.5f;
 }
 
 bool DrawingProgramSelection::point_collided_with_rotate_center_handle_point(const Vector2f& p) {
     return SCollision::collide(SCollision::Circle(rotateData.centerHandlePoint, drawP.drag_point_radius()), p);
 }
 
-bool DrawingProgramSelection::point_collided_with_rotate_handle_point(const Vector2f& p) {
-    return SCollision::collide(SCollision::Circle(rotateData.handlePoint, drawP.drag_point_radius() * ROTATION_POINT_RADIUS_MULTIPLIER), p);
+int DrawingProgramSelection::scale_corner_at(const Vector2f& p) {
+    for(int i = 0; i < 4; i++) {
+        if(SCollision::collide(SCollision::Circle(scaleData.cornerHandlePoints[i], drawP.drag_point_radius()), p))
+            return i;
+    }
+    return -1;
+}
+
+int DrawingProgramSelection::rotate_corner_at(const Vector2f& p) {
+    for(int i = 0; i < 4; i++) {
+        if(SCollision::collide(SCollision::Circle(rotateData.cornerHandlePoints[i], drawP.drag_point_radius()), p))
+            return i;
+    }
+    return -1;
+}
+
+// Small on screen = handles would cover most of the box, so moving takes priority over them
+bool DrawingProgramSelection::selection_is_small_on_screen() {
+    float minSide = std::min((scaleData.cornerHandlePoints[0] - scaleData.cornerHandlePoints[1]).norm(), (scaleData.cornerHandlePoints[0] - scaleData.cornerHandlePoints[3]).norm());
+    return minSide < drawP.drag_point_radius() * 5.0f;
 }
 
 void DrawingProgramSelection::commit_transform_selection() {
@@ -479,12 +556,58 @@ void DrawingProgramSelection::commit_transform_selection() {
         };
 
         drawP.world.undo.push(std::make_unique<TransformCanvasComponentsWorldUndoAction>(std::move(undoIDList), std::move(transformDataList)));
+
+        // EncxdedCanvas Stretch mode: the pen-thickness compensation applied live joins the same undo step
+        if(!thicknessOriginals.empty())
+            thickness_commit(true);
     }
+    else if(!thicknessOriginals.empty())
+        thickness_restore_originals();
 
     drawP.send_transforms_for(selectedSet);
 
     reset_transform_data();
     calculate_aabb();
+}
+
+// Only pen/highlighter/line strokes that carry their pen source change; images, text, shapes and older strokes are left alone
+void DrawingProgramSelection::thickness_capture_originals() {
+    check_add_stroke_color_change_undo();
+    thicknessOriginals.clear();
+    for(auto& c : selectedSet) {
+        auto& comp = c->obj->get_comp();
+        if(comp.get_type() == CanvasComponentType::MESH && static_cast<MeshCanvasComponent&>(comp).has_pen_source())
+            thicknessOriginals.emplace_back(c, comp.get_data_copy());
+    }
+}
+
+void DrawingProgramSelection::thickness_apply_factor(float factor) {
+    for(auto& [c, original] : thicknessOriginals) {
+        auto& mesh = static_cast<MeshCanvasComponent&>(c->obj->get_comp());
+        mesh.set_data_from(*original);
+        if(factor != 1.0f)
+            mesh.scale_stroke_thickness(factor);
+        c->obj->commit_update_dont_invalidate_cache(drawP);
+        c->obj->send_comp_update(drawP, false);
+    }
+}
+
+void DrawingProgramSelection::thickness_restore_originals() {
+    thickness_apply_factor(1.0f);
+    thicknessOriginals.clear();
+}
+
+void DrawingProgramSelection::thickness_commit(bool joinPreviousUndo) {
+    for(auto& [c, original] : thicknessOriginals) {
+        c->obj->send_comp_update(drawP, true);
+        auto undoAction = std::make_unique<EditCanvasComponentWorldUndoAction>(std::move(original), drawP.world.undo.get_undoid_from_netid(c->obj.get_net_id()));
+        if(joinPreviousUndo)
+            drawP.world.undo.push_on_last(std::move(undoAction));
+        else
+            drawP.world.undo.push(std::move(undoAction));
+        joinPreviousUndo = true; // The rest of the strokes join the same undo step
+    }
+    thicknessOriginals.clear();
 }
 
 void DrawingProgramSelection::update() {
@@ -578,27 +701,58 @@ void DrawingProgramSelection::input_mouse_button_on_canvas_callback_modify_selec
         switch(transformOpHappening) {
             case TransformOperation::NONE: {
                 if(button.down && !drawP.world.main.input.key(InputManager::KEY_GENERIC_LSHIFT).held && !drawP.world.main.input.key(InputManager::KEY_GENERIC_LALT).held) {
-                    if(point_collided_with_scale_point(button.pos)) {
-                        scaleData.currentPos = scaleData.startPos = selectionTransformCoords.from_space_world(initialSelectionAABB.max);
-                        scaleData.centerPos = selectionTransformCoords.from_space_world(initialSelectionAABB.center());
-                        transformOpHappening = TransformOperation::SCALE;
-                        check_add_stroke_color_change_undo();
-                    }
-                    else if(point_collided_with_rotate_center_handle_point(button.pos)) {
-                        transformOpHappening = TransformOperation::ROTATE_RELOCATE_CENTER;
-                        check_add_stroke_color_change_undo();
-                    }
-                    else if(point_collided_with_rotate_handle_point(button.pos)) {
-                        rotateData.rotationAngle = 0.0;
-                        transformOpHappening = TransformOperation::ROTATE;
-                        check_add_stroke_color_change_undo();
-                    }
-                    else if(point_collided_with_selection_aabb(button.pos)) {
+                    rebuild_cam_space();
+
+                    auto start_translate = [&] {
                         translateData.startPos = drawP.world.drawData.cam.c.from_space(button.pos);
                         transformOpHappening = TransformOperation::TRANSLATE;
                         translateData.translateWithKeys = false;
                         check_add_stroke_color_change_undo();
+                    };
+
+                    // EncxdedCanvas: moving is the primary action. On small selections it wins over every handle;
+                    // otherwise handles are checked first, since they sit on/just outside the box edges.
+                    bool smallSelection = selection_is_small_on_screen();
+                    int scaleCorner = scale_corner_at(button.pos);
+                    int rotateCorner = rotate_corner_at(button.pos);
+
+                    if(showRotationAnchor && point_collided_with_rotate_center_handle_point(button.pos)) {
+                        transformOpHappening = TransformOperation::ROTATE_RELOCATE_CENTER;
+                        check_add_stroke_color_change_undo();
                     }
+                    else if(smallSelection && point_collided_with_selection_aabb(button.pos))
+                        start_translate();
+                    else if(scaleCorner != -1) {
+                        // Scale about the opposite corner
+                        scaleData.currentPos = scaleData.startPos = selectionRectPoints[scaleCorner];
+                        scaleData.centerPos = selectionRectPoints[(scaleCorner + 2) % 4];
+                        scaleData.sizeFactor = 1.0f;
+                        transformOpHappening = TransformOperation::SCALE;
+                        check_add_stroke_color_change_undo();
+                        if(scaleMode == ScaleMode::STRETCH)
+                            thickness_capture_originals();
+                    }
+                    else if(rotateCorner != -1) {
+                        auto now = std::chrono::steady_clock::now();
+                        if(now - lastRotateHandleTap < std::chrono::milliseconds(350)) {
+                            // Double tap: toggle the movable rotation anchor (hidden = rotate about the center)
+                            showRotationAnchor = !showRotationAnchor;
+                            if(!showRotationAnchor)
+                                rotateData.centerPos = selectionTransformCoords.from_space_world(initialSelectionAABB.center());
+                            lastRotateHandleTap = {};
+                            drawP.world.main.g.gui.set_to_layout();
+                        }
+                        else {
+                            lastRotateHandleTap = now;
+                            Vector2f fromCenter = button.pos - rotateData.centerHandlePoint;
+                            rotateData.startAngle = std::atan2(fromCenter.y(), fromCenter.x());
+                            rotateData.rotationAngle = 0.0;
+                            transformOpHappening = TransformOperation::ROTATE;
+                            check_add_stroke_color_change_undo();
+                        }
+                    }
+                    else if(point_collided_with_selection_aabb(button.pos))
+                        start_translate();
                 }
                 break;
             }
@@ -645,6 +799,10 @@ void DrawingProgramSelection::input_mouse_motion_callback_modify_selection(const
                 if(!isAnyNumberZero) {
                     WorldMultiplier scaleAmount = WorldMultiplier(centerToScaleStartNorm) / WorldMultiplier(centerToScaleCurrentNorm);
                     selectionTransformCoords = CoordSpaceHelperTransform(scaleData.centerPos, scaleAmount);
+                    scaleData.sizeFactor = static_cast<float>(WorldMultiplier(centerToScaleCurrentNorm) / WorldMultiplier(centerToScaleStartNorm));
+                    // Stretch: shrink the pen width by the same amount the selection grows, so the visible thickness stays put
+                    if(!thicknessOriginals.empty() && scaleData.sizeFactor > 0.0f)
+                        thickness_apply_factor(1.0f / scaleData.sizeFactor);
                 }
                 break;
             }
@@ -653,8 +811,9 @@ void DrawingProgramSelection::input_mouse_motion_callback_modify_selection(const
                 break;
             }
             case TransformOperation::ROTATE: {
+                // Relative to where the handle was grabbed, so the selection doesn't jump
                 Vector2f rotationPointDiff = motion.pos - rotateData.centerHandlePoint;
-                rotateData.rotationAngle = std::atan2(rotationPointDiff.y(), rotationPointDiff.x());
+                rotateData.rotationAngle = std::atan2(rotationPointDiff.y(), rotationPointDiff.x()) - rotateData.startAngle;
                 selectionTransformCoords = CoordSpaceHelperTransform(rotateData.centerPos, rotateData.rotationAngle);
                 break;
             }
@@ -664,6 +823,8 @@ void DrawingProgramSelection::input_mouse_motion_callback_modify_selection(const
 
 void DrawingProgramSelection::cancel_finger_touch_callback(const FingerInput::TouchCallbackArgs& touch) {
     if(is_something_selected() && transformOpHappening != TransformOperation::NONE) {
+        if(!thicknessOriginals.empty())
+            thickness_restore_originals();
         reset_transform_data();
         calculate_aabb();
     }
@@ -861,9 +1022,20 @@ void DrawingProgramSelection::rebuild_cam_space() {
     selectionRectPoints[2] = selectionTransformCoords.from_space_world(initialSelectionAABB.max);
     selectionRectPoints[3] = selectionTransformCoords.from_space_world(initialSelectionAABB.top_right());
 
-    scaleData.handlePoint = drawP.world.drawData.cam.c.to_space(selectionRectPoints[2]);
+    // EncxdedCanvas: scale handles on each corner; rotate handles diagonally outside each corner
+    Vector2f camCenter{0.0f, 0.0f};
+    for(int i = 0; i < 4; i++) {
+        scaleData.cornerHandlePoints[i] = drawP.world.drawData.cam.c.to_space(selectionRectPoints[i]);
+        camCenter += scaleData.cornerHandlePoints[i] * 0.25f;
+    }
+    float rotateHandleDistance = drawP.drag_point_radius() * 2.2f;
+    for(int i = 0; i < 4; i++) {
+        Vector2f outward = scaleData.cornerHandlePoints[i] - camCenter;
+        float len = outward.norm();
+        outward = len > 0.001f ? (outward / len).eval() : Vector2f{0.7071f, 0.7071f};
+        rotateData.cornerHandlePoints[i] = scaleData.cornerHandlePoints[i] + outward * rotateHandleDistance;
+    }
     rotateData.centerHandlePoint = drawP.world.drawData.cam.c.to_space(rotateData.centerPos);
-    rotateData.handlePoint = get_rotation_point_pos_from_angle(rotateData.rotationAngle);
 
     SCollision::ColliderCollection<WorldScalar> collideRectWorld;
     collideRectWorld.triangle.emplace_back(selectionRectPoints[0], selectionRectPoints[1], selectionRectPoints[2]);
@@ -871,10 +1043,6 @@ void DrawingProgramSelection::rebuild_cam_space() {
     collideRectWorld.recalculate_bounds();
 
     camSpaceSelection = drawP.world.drawData.cam.c.world_collider_to_coords<SCollision::ColliderCollection<float>>(collideRectWorld);
-}
-
-Vector2f DrawingProgramSelection::get_rotation_point_pos_from_angle(double angle) {
-    return Vector2f{rotateData.centerHandlePoint + ROTATION_POINTS_DISTANCE * drawP.world.main.g.final_gui_scale() * Vector2f{std::cos(angle), std::sin(angle)}};
 }
 
 void DrawingProgramSelection::draw_components(SkCanvas* canvas, const DrawData& drawData) {
@@ -891,6 +1059,18 @@ void DrawingProgramSelection::draw_components(SkCanvas* canvas, const DrawData& 
     }
 }
 
+std::vector<NetworkingObjects::NetObjID> DrawingProgramSelection::get_selected_ids() const {
+    std::vector<NetworkingObjects::NetObjID> ids;
+    ids.reserve(selectedSet.size());
+    for(auto& c : selectedSet)
+        ids.emplace_back(c->obj.get_net_id());
+    return ids;
+}
+
+CoordSpaceHelper DrawingProgramSelection::get_selection_draw_camera(const CoordSpaceHelper& cam) const {
+    return selectionTransformCoords.other_coord_space_to_this_space(cam);
+}
+
 void DrawingProgramSelection::draw_gui(SkCanvas* canvas, const DrawData& drawData) {
     if(is_something_selected() && !camSpaceSelection.triangle.empty()) {
         SkPathBuilder selectionRectPath;
@@ -899,16 +1079,62 @@ void DrawingProgramSelection::draw_gui(SkCanvas* canvas, const DrawData& drawDat
         selectionRectPath.lineTo(convert_vec2<SkPoint>(camSpaceSelection.triangle[0].p[2]));
         selectionRectPath.lineTo(convert_vec2<SkPoint>(camSpaceSelection.triangle[1].p[2]));
         selectionRectPath.close();
-        SkPaint p{SkColor4f{0.3f, 0.6f, 0.9f, 0.4f}};
-        canvas->drawPath(selectionRectPath.detach(), p);
+        SkPath selectionRect = selectionRectPath.detach();
+        SkPaint p{SkColor4f{0.3f, 0.6f, 0.9f, 0.12f}};
+        canvas->drawPath(selectionRect, p);
+        SkPaint outline{SkColor4f{0.55f, 0.75f, 1.0f, 0.9f}};
+        outline.setStyle(SkPaint::kStroke_Style);
+        outline.setStrokeWidth(1.5f);
+        outline.setAntiAlias(drawData.skiaAA);
+        canvas->drawPath(selectionRect, outline);
 
         if(drawP.is_actual_selection_tool(drawP.drawTool->get_type())) {
-            if(transformOpHappening == TransformOperation::NONE || transformOpHappening == TransformOperation::ROTATE || transformOpHappening == TransformOperation::ROTATE_RELOCATE_CENTER)
+            float uiScale = drawP.world.main.g.final_gui_scale();
+            SkPaint handleFill{SkColor4f{1.0f, 1.0f, 1.0f, 1.0f}};
+            handleFill.setAntiAlias(drawData.skiaAA);
+            SkPaint handleStroke{SkColor4f{0.15f, 0.2f, 0.3f, 1.0f}};
+            handleStroke.setStyle(SkPaint::kStroke_Style);
+            handleStroke.setStrokeWidth(1.5f * uiScale);
+            handleStroke.setAntiAlias(drawData.skiaAA);
+
+            if(transformOpHappening == TransformOperation::NONE || transformOpHappening == TransformOperation::SCALE) {
+                for(const Vector2f& corner : scaleData.cornerHandlePoints) {
+                    canvas->drawCircle(corner.x(), corner.y(), 5.0f * uiScale, handleFill);
+                    canvas->drawCircle(corner.x(), corner.y(), 5.0f * uiScale, handleStroke);
+                }
+            }
+            if(transformOpHappening == TransformOperation::NONE || transformOpHappening == TransformOperation::ROTATE) {
+                // Small curved arrow facing outward from each corner
+                SkPaint arrowPaint{SkColor4f{1.0f, 1.0f, 1.0f, 0.95f}};
+                arrowPaint.setStyle(SkPaint::kStroke_Style);
+                arrowPaint.setStrokeWidth(2.0f * uiScale);
+                arrowPaint.setStrokeCap(SkPaint::kRound_Cap);
+                arrowPaint.setAntiAlias(drawData.skiaAA);
+                SkPaint arrowShadow = arrowPaint;
+                arrowShadow.setColor4f({0.1f, 0.12f, 0.18f, 0.8f});
+                arrowShadow.setStrokeWidth(4.0f * uiScale);
+                Vector2f camCenter = (scaleData.cornerHandlePoints[0] + scaleData.cornerHandlePoints[2]) * 0.5f;
+                float r = 7.0f * uiScale;
+                for(const Vector2f& h : rotateData.cornerHandlePoints) {
+                    Vector2f outward = (h - camCenter).normalized();
+                    float baseAngle = std::atan2(outward.y(), outward.x()) * 180.0f / std::numbers::pi_v<float>;
+                    SkRect arcRect = SkRect::MakeLTRB(h.x() - r, h.y() - r, h.x() + r, h.y() + r);
+                    SkPathBuilder arrow;
+                    arrow.arcTo(arcRect, baseAngle - 70.0f, 140.0f, true);
+                    float endAngle = (baseAngle + 70.0f) * std::numbers::pi_v<float> / 180.0f;
+                    Vector2f tip{h.x() + r * std::cos(endAngle), h.y() + r * std::sin(endAngle)};
+                    Vector2f tangent{-std::sin(endAngle), std::cos(endAngle)};
+                    Vector2f normal{std::cos(endAngle), std::sin(endAngle)};
+                    arrow.moveTo(convert_vec2<SkPoint>((tip - tangent * (4.0f * uiScale) + normal * (3.0f * uiScale)).eval()));
+                    arrow.lineTo(convert_vec2<SkPoint>(tip));
+                    arrow.lineTo(convert_vec2<SkPoint>((tip - tangent * (4.0f * uiScale) - normal * (3.0f * uiScale)).eval()));
+                    SkPath arrowPath = arrow.detach();
+                    canvas->drawPath(arrowPath, arrowShadow);
+                    canvas->drawPath(arrowPath, arrowPaint);
+                }
+            }
+            if(showRotationAnchor && (transformOpHappening == TransformOperation::NONE || transformOpHappening == TransformOperation::ROTATE || transformOpHappening == TransformOperation::ROTATE_RELOCATE_CENTER))
                 drawP.draw_drag_circle(canvas, rotateData.centerHandlePoint, {0.9f, 0.5f, 0.1f, 1.0f}, drawData);
-            if(transformOpHappening == TransformOperation::NONE || transformOpHappening == TransformOperation::ROTATE)
-                drawP.draw_drag_circle(canvas, rotateData.handlePoint, {0.9f, 0.5f, 0.1f, 1.0f}, drawData, ROTATION_POINT_RADIUS_MULTIPLIER);
-            if(transformOpHappening == TransformOperation::NONE || transformOpHappening == TransformOperation::SCALE)
-                drawP.draw_drag_circle(canvas, scaleData.handlePoint, {0.1f, 0.9f, 0.9f, 1.0f}, drawData);
         }
     }
 }

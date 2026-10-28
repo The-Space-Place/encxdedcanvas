@@ -17,6 +17,7 @@
  */
 
 #pragma once
+#include <array>
 #include <vector>
 #include <string>
 #include <optional>
@@ -41,10 +42,19 @@ class ProgramSettingsGUI {
         void reload_theme_list(MainProgram& main);
         void text_button_wide(GUIStuff::GUIManager& gui, const char* id, const char* str, const std::function<void()>& onClick);
 
+        // EncxdedCanvas: Settings > Tools, editable size preset rows
+        void size_presets_editor(MainProgram& main, const char* id, const char* title, std::array<float, 6>& presets, int presetListIndex);
+        struct EditingSizePreset {
+            int presetListIndex; // 0 = pen, 1 = highlighter
+            size_t presetIndex;
+        };
+        std::optional<EditingSizePreset> editingSizePreset;
+
         enum class SettingsMenu {
             GENERAL,
             GRAPHICS,
             INTERFACE,
+            TOOLS,
             PEN,
             TOUCH,
             THEME,

@@ -19,6 +19,7 @@
 #include "NetServer.hpp"
 #include "Helpers/Networking/ByteStream.hpp"
 #include "NetLibrary.hpp"
+#include <algorithm>
 #include <chrono>
 #include <rtc/peerconnection.hpp>
 #include <Helpers/Random.hpp>
@@ -38,7 +39,7 @@ void NetServer::update() {
         return;
     for(auto& client : clients) {
         if(client) {
-            bool timedOut = std::chrono::steady_clock::now() - client->lastMessageTime > NetLibrary::TIMEOUT_DURATION;
+            bool timedOut = !client->recordingSink && std::chrono::steady_clock::now() - client->lastMessageTime > NetLibrary::TIMEOUT_DURATION;
             if(timedOut) {
                 client->setToDisconnect = true;
                 Logger::get().log(Logger::LogType::INFO, "Connection timed out");
@@ -222,7 +223,13 @@ void NetServer::send_multi_command_to_all_clients(const std::string& channel, co
 void NetServer::ClientData::send_queued_messages(NetServer& server) {
     for(auto& [channelName, messageQueue] : messageQueues) {
         bool addMessageOrder = NetLibrary::is_ordered_channel(channelName);
-        if(this == server.directConnectClientData.get()) {
+        if(recordingSink) { // EncxdedCanvas
+            while(!messageQueue.empty()) {
+                recordingSink(channelName, addMessageOrder ? NetLibrary::attach_message_order(messageQueue.front().order, messageQueue.front().ss->str()) : messageQueue.front().ss->str());
+                messageQueue.pop();
+            }
+        }
+        else if(this == server.directConnectClientData.get()) {
             NetClient* c = server.directConnectClient;
             std::scoped_lock recvQueueLock(c->receiveQueue->mut);
             while(!messageQueue.empty()) {
@@ -341,6 +348,38 @@ void NetServer::add_disconnect_callback(const NetServerDisconnectCallback& callb
 
 const std::vector<std::shared_ptr<NetServer::ClientData>>& NetServer::get_client_list() const {
     return clients;
+}
+
+std::shared_ptr<NetServer::ClientData> NetServer::add_recording_client(const std::function<void(const std::string& channel, std::string&& data)>& sink) {
+    auto c = std::make_shared<ClientData>();
+    c->recordingSink = sink;
+    c->lastMessageTime = std::chrono::steady_clock::now();
+    clients.emplace_back(c);
+    return c;
+}
+
+void NetServer::remove_recording_client(const std::shared_ptr<ClientData>& client) {
+    if(client) {
+        client->send_queued_messages(*this); // Flush what's left into the sink
+        std::erase(clients, client);
+    }
+}
+
+bool NetServer::move_recording_clients_to(NetServer& other) {
+    bool moved = false;
+    std::erase_if(clients, [&](const std::shared_ptr<ClientData>& c) {
+        if(!c || !c->recordingSink)
+            return false;
+        c->send_queued_messages(*this);
+        other.clients.emplace_back(c);
+        moved = true;
+        return true;
+    });
+    return moved;
+}
+
+bool NetServer::has_network_clients() const {
+    return std::any_of(clients.begin(), clients.end(), [](const auto& c) { return c && !c->recordingSink; });
 }
 
 NetServer::~NetServer() {

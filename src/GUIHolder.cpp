@@ -27,7 +27,7 @@
 GUIHolder::GUIHolder(MainProgram& m):
     main(m)
 {
-    gui.io.textTypeface = main.fonts->map["Roboto"];
+    gui.io.textTypeface = main.fonts->map["BDO Grotesk"];
     gui.io.fonts = main.fonts;
     gui.io.input = &main.input;
 
@@ -81,6 +81,11 @@ void GUIHolder::save_theme(const std::filesystem::path& configPath, const std::s
 }
 
 bool GUIHolder::load_theme(const std::filesystem::path& configPath, const std::string& themeName) {
+    // EncxdedCanvas: built-in themes aren't stored as files
+    if(auto builtInTheme = GUIStuff::get_built_in_theme(themeName)) {
+        gui.io.theme = builtInTheme;
+        return true;
+    }
     std::filesystem::path themeDir = configPath / "themes";
     bool successfullyLoaded = false;
     if(std::filesystem::exists(themeDir) && std::filesystem::is_directory(themeDir)) {

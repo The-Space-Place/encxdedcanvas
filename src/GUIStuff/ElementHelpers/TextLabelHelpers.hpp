@@ -25,6 +25,11 @@ void text_label_color(GUIManager& gui, std::string_view val, const SkColor4f& co
 void text_label_size(GUIManager& gui, std::string_view val, float modifier);
 void text_label_light(GUIManager& gui, std::string_view val);
 void text_label(GUIManager& gui, std::string_view val);
+void text_label_bold(GUIManager& gui, std::string_view val);
+// fontId is one of GUI_FONT_* (weight); modifier scales the normal font size
+void text_label_styled(GUIManager& gui, std::string_view val, uint16_t fontId, float modifier = 1.0f);
+// Extra-bold title text, scaled from the normal font size
+void text_label_heading(GUIManager& gui, std::string_view val, float modifier = 1.15f);
 void text_label_light_centered(GUIManager& gui, std::string_view val);
 void text_label_centered(GUIManager& gui, std::string_view val);
 

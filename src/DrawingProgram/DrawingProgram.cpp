@@ -452,7 +452,7 @@ void DrawingProgram::send_transforms_for(const std::vector<CanvasComponentContai
         for(auto& obj : objsToSendTransformsFor)
             transforms.emplace_back(obj->obj.get_net_id(), obj->obj->coords);
         if(world.netObjMan.is_server())
-            world.netServer->send_items_to_all_clients(RELIABLE_COMMAND_CHANNEL, CLIENT_TRANSFORM_MANY_COMPONENTS, transforms);
+            world.broadcast_server()->send_items_to_all_clients(RELIABLE_COMMAND_CHANNEL, CLIENT_TRANSFORM_MANY_COMPONENTS, transforms); // EncxdedCanvas: also reaches recordings
         else
             world.netClient->send_items_to_server(RELIABLE_COMMAND_CHANNEL, SERVER_TRANSFORM_MANY_COMPONENTS, transforms);
     }
@@ -627,13 +627,15 @@ void DrawingProgram::update() {
 
 void DrawingProgram::pen_tool_switch_check() {
     if(world.main.input.pen.isEraser && !temporaryEraser && tempMoveToolSwitch == TemporaryMoveToolSwitch::NONE) {
-        if(drawTool->get_type() == DrawingProgramToolType::BRUSH)
+        if(drawTool->get_type() == DrawingProgramToolType::BRUSH || drawTool->get_type() == DrawingProgramToolType::HIGHLIGHTER) {
+            toolBeforeTemporaryEraser = drawTool->get_type();
             switch_to_tool(DrawingProgramToolType::ERASER);
+        }
         temporaryEraser = true;
     }
     else if(!world.main.input.pen.isEraser && temporaryEraser && tempMoveToolSwitch == TemporaryMoveToolSwitch::NONE) {
         if(drawTool->get_type() == DrawingProgramToolType::ERASER)
-            switch_to_tool(DrawingProgramToolType::BRUSH);
+            switch_to_tool(toolBeforeTemporaryEraser);
         temporaryEraser = false;
     }
 }
@@ -684,6 +686,8 @@ void DrawingProgram::switch_to_tool_ptr(std::unique_ptr<DrawingProgramToolBase> 
 
 void DrawingProgram::switch_to_tool(DrawingProgramToolType newToolType, bool force) {
     if(newToolType != drawTool->get_type() || force) {
+        if(newToolType == DrawingProgramToolType::SCREENSHOT && drawTool->get_type() != DrawingProgramToolType::SCREENSHOT)
+            toolBeforeScreenshot = drawTool->get_type() == DrawingProgramToolType::GRIDMODIFY ? DrawingProgramToolType::EDIT : drawTool->get_type();
         drawTool->switch_tool(newToolType);
         drawTool = DrawingProgramToolBase::allocate_tool_type(*this, newToolType);
         clear_right_click_popup();
@@ -909,9 +913,13 @@ void DrawingProgram::draw(SkCanvas* canvas, const DrawData& drawData) {
             }
         }
 
-        selection.draw_gui(canvas, drawData);
-        drawTool->draw(canvas, drawData);
+        draw_overlays(canvas, drawData);
     }
+}
+
+void DrawingProgram::draw_overlays(SkCanvas* canvas, const DrawData& drawData) {
+    selection.draw_gui(canvas, drawData);
+    drawTool->draw(canvas, drawData);
 }
 
 Vector4f* DrawingProgram::get_foreground_color_ptr() {

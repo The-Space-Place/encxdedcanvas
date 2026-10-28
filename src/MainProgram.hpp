@@ -185,6 +185,7 @@ class MainProgram {
         void input_window_focus_lost();
 
         bool is_world_focus(const World* w);
+        Screen* get_screen() const { return screen.get(); } // EncxdedCanvas
 
         std::optional<InputManager::TextBoxStartInfo> get_text_box_start_info();
 

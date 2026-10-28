@@ -36,7 +36,7 @@ TextBoxCanvasComponent::TextBoxCanvasComponent():
     textBox->set_initial_text_style(tStyle);
 
     textBox->set_initial_text_style_modifier(std::make_shared<SizeTextStyleModifier>(18.0f));
-    textBox->set_initial_text_style_modifier(std::make_shared<FontFamiliesTextStyleModifier>(std::vector<SkString>{SkString{"Roboto"}}));
+    textBox->set_initial_text_style_modifier(std::make_shared<FontFamiliesTextStyleModifier>(std::vector<SkString>{SkString{"BDO Grotesk"}}));
 }
 
 void TextBoxCanvasComponent::set_initial_text_color(const Vector4f& initialColor) {

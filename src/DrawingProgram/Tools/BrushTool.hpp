@@ -26,6 +26,7 @@
 #include "../../CanvasComponents/CanvasComponentContainer.hpp"
 #include <Helpers/NetworkingObjects/NetObjWeakPtr.hpp>
 #include "../../CanvasComponents/BrushComponentCode.hpp"
+#include <chrono>
 
 class DrawingProgram;
 struct DrawData;
@@ -33,7 +34,7 @@ class BrushStrokeCanvasComponent;
 
 class BrushTool : public DrawingProgramToolBase {
     public:
-        BrushTool(DrawingProgram& initDrawP);
+        BrushTool(DrawingProgram& initDrawP, bool initIsHighlighter = false);
         virtual DrawingProgramToolType get_type() override;
         virtual void gui_phone_toolbox(CanvasEditorScreen& t) override;
         virtual void right_click_popup_gui(Vector2f popupPos) override;
@@ -50,7 +51,17 @@ class BrushTool : public DrawingProgramToolBase {
         void commit_stroke();
         void commit_data(bool final);
 
-        BrushComponentCode::BrushStrokeGenerationData genData;
+        bool has_round_caps();
+
+        // EncxdedCanvas: highlighter mode draws translucent, constant-width strokes with its own size/caps settings
+        const bool isHighlighter;
+
+        // EncxdedCanvas: raw input of the stroke being drawn, in the stroke's space
+        std::vector<BrushComponentCode::RawSample> rawSamples;
+        BrushComponentCode::StrokeParams strokeParams;
+        float currentPressure = 1.0f;
+        std::chrono::steady_clock::time_point strokeStart;
+        float seconds_since_stroke_start() const;
         bool commitUpdate = false;
         CanvasComponentContainer::ObjInfo* objInfoBeingEdited = nullptr;
 };

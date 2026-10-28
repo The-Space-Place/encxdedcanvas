@@ -41,7 +41,7 @@ void MeshEditTool::gui_phone_toolbox(CanvasEditorScreen& t) {
     gui.new_id("edit tool mesh", [&] {
         left_to_right_line_layout(gui, [&]() {
             t.color_selector_button("Mesh Color", &a.d.color, { .onChange = commit_update_func });
-            text_label(gui, "Mesh Color");
+            text_label_bold(gui, "Mesh Color");
         });
     });
 }

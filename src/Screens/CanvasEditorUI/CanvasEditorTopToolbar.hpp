@@ -45,6 +45,9 @@ class CanvasEditorTopToolbar {
         void global_log();
         void remaining_area();
         void mobile_ui_name_fill();
+        void mobile_tiled_remaining_area(float width, std::vector<IconMenuButton> buttons);
+        void canvas_settings_panel();
+        bool customBackgroundPickerOpen = false;
         void desktop_ui_tabs_fill();
         void hidden_button_popup(GUIStuff::Element* b, std::vector<IconMenuButton> l);
         void icon_menu_dropdown(GUIStuff::Element* b, const char* id, int zIndex, const std::vector<IconMenuButton>& l, const std::function<void()>& clickCallback);

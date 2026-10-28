@@ -43,6 +43,8 @@ void LineDrawTool::commit_data(bool final) {
         NetworkingObjects::NetObjOwnerPtr<CanvasComponentContainer>& containerPtr = objInfoBeingEdited->obj;
         MeshCanvasComponent& newMesh = static_cast<MeshCanvasComponent&>(containerPtr->get_comp());
         newMesh.d.meshPath = BrushComponentCode::brush_stroke_to_skpath(brushPoints, drawP.world.main.toolConfig.lineDraw.hasRoundCaps);
+        newMesh.d.penPoints = brushPoints; // Pen source, so thickness can be changed later
+        newMesh.d.penRoundCaps = drawP.world.main.toolConfig.lineDraw.hasRoundCaps;
         if(final) {
             containerPtr->get_comp().simplify_paths();
             containerPtr->normalize_object_coordinates();

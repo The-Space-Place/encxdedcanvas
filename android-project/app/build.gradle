@@ -6,9 +6,15 @@ task conanInstall {
     def conanExecutable = "conan" // define the path to your conan installation
     def buildDir = file("build")
     buildDir.mkdirs()
-    ["Debug", "Release"].each { String build_type ->
-        // ["armv7", "armv8", "x86", "x86_64"]
-        ["armv8", "x86_64"].each { String arch ->
+    // This runs at configuration time on every Gradle invocation, so only install what's being built:
+    // archs follow -Pabis, and build types follow the requested tasks (e.g. assembleDebug -> Debug only).
+    def abiToArch = ['armeabi-v7a': 'armv7', 'arm64-v8a': 'armv8', 'x86': 'x86', 'x86_64': 'x86_64']
+    def archs = (project.findProperty('abis')?.split(',') ?: ['arm64-v8a', 'x86_64']).collect { abiToArch[it] }
+    def taskNames = gradle.startParameter.taskNames.join(' ')
+    def buildTypes = ["Debug", "Release"].findAll { taskNames.contains(it) }
+    if (buildTypes.isEmpty()) buildTypes = ["Debug", "Release"]
+    buildTypes.each { String build_type ->
+        archs.each { String arch ->
             def cmd = conanExecutable + " install " +
                     "../../.. --profile android -s build_type="+ build_type +" -s arch=" + arch +
                     " --build missing -c tools.cmake.cmake_layout:build_folder_vars=['settings.arch']"
@@ -31,7 +37,7 @@ android {
     compileSdk 36
     ndkVersion = "30.0.16248370" // Must match NDK used in conan profile
     defaultConfig {
-        applicationId 'com.erroratline0.InfiniPaint' // Considering changing this to all lowercase, but only when transferring files between versions is simple (which it isn't right now)
+        applicationId 'com.joshcarter.encxdedcanvas' // Java package/namespace stays com.erroratline0.infinipaint since JNI symbols in src/AndroidJNICalls.cpp depend on it
         minSdkVersion 27
         targetSdk 36
         versionCode 5
@@ -41,7 +47,8 @@ android {
                 cppFlags "-fexceptions", "-frtti"
                 arguments "-DANDROID_PLATFORM=android-21", "-DANDROID_STL=c++_shared", "-DCMAKE_TOOLCHAIN_FILE=conan_android_toolchain.cmake", "-DGRAPHICS_BACKEND=OpenGLES3.0"
                 // abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
-                abiFilters 'arm64-v8a', 'x86_64'
+                // Pass -Pabis=arm64-v8a for faster dev builds (see scripts/deploy-android.ps1)
+                abiFilters(*(project.findProperty('abis')?.split(',') ?: ['arm64-v8a', 'x86_64']))
             }
         }
     }
@@ -79,7 +86,7 @@ android {
     applicationVariants.all { variant ->
         tasks["merge${variant.name.capitalize()}Assets"]
             .dependsOn("externalNativeBuild${variant.name.capitalize()}")
-        variant.resValue "string", "app_name", '"' + "InfiniPaint" + variant.buildType.buildTypeName + '"'
+        variant.resValue "string", "app_name", '"' + "EncxdedCanvas" + variant.buildType.buildTypeName + '"'
     }
 
     sourceSets.main {
@@ -88,7 +95,8 @@ android {
     }
     externalNativeBuild {
         cmake {
-            version "3.31.6"
+            // Override per machine with cmakeVersion in ~/.gradle/gradle.properties (and cmake.dir in local.properties)
+            version project.findProperty('cmakeVersion') ?: "3.31.6"
             path '../../CMakeLists.txt'
         }
     }

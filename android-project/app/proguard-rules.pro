@@ -25,6 +25,7 @@
     void shareText(java.lang.String);
     void shareInternalFiles(java.lang.String[], java.lang.String, boolean);
     java.lang.String getFileNameFromUriString(java.lang.String);
+    boolean saveVideoToGallery(java.lang.String, java.lang.String); # EncxdedCanvas
 }
 
 -keep,includedescriptorclasses,allowoptimization class org.libsdl.app.SDLActivity {
@@ -61,6 +62,7 @@
     boolean supportsRelativeMouse();
     int openFileDescriptor(java.lang.String, java.lang.String);
     boolean showFileDialog(java.lang.String[], boolean, int, java.lang.String, int);
+    void setSaveDialogSuggestedName(java.lang.String); # EncxdedCanvas, called from native code only
     java.lang.String getPreferredLocales();
     java.lang.String formatLocale(java.util.Locale);
 }

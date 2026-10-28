@@ -738,8 +738,9 @@ class ConanSkia(ConanFile):
         mkdir(self, "out/conan")
         save(self, "out/conan/args.gn", args)
 
-        if self.settings.os == "Windows":
-            self.run("bin\gn gen out/conan")
+        # Depends on the machine running the build, not the target (e.g. Windows host -> Android)
+        if self.settings_build.os == "Windows":
+            self.run("bin\\gn gen out/conan")
         else:
             self.run("bin/gn gen out/conan")
 

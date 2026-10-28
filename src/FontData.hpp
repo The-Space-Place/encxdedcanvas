@@ -23,6 +23,7 @@
 #include <unordered_map>
 #include <Eigen/Dense>
 #include <modules/skparagraph/include/FontCollection.h>
+#include <modules/skparagraph/include/TypefaceFontProvider.h>
 
 using namespace Eigen;
 
@@ -31,6 +32,9 @@ struct FontData {
     sk_sp<SkFontMgr> defaultFontMgr;
     sk_sp<SkFontMgr> localFontMgr;
     sk_sp<skia::textlayout::FontCollection> collection;
+    // EncxdedCanvas: real weight instances of variable fonts (Skia's data font manager registers
+    // named instances that all render at the default weight). Takes priority in the collection.
+    sk_sp<skia::textlayout::TypefaceFontProvider> variableWeightFonts;
     std::unordered_map<std::string, sk_sp<SkTypeface>> map;
     bool fallbackOnEmoji = false;
     const std::vector<SkString>& get_default_font_families() const;

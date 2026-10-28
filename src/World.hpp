@@ -128,6 +128,15 @@ class World {
         std::shared_ptr<NetServer> netServer;
         std::shared_ptr<NetClient> netClient;
 
+        // EncxdedCanvas recordings. A recording is a client that never leaves this process: it gets the same initial state and
+        // updates a network client would, and its messages go to the sink. When not hosting, a private server (not on the network,
+        // not counted by is_connected) carries them.
+        std::shared_ptr<NetServer::ClientData> start_recording_client(const std::function<void(const std::string& channel, std::string&& data)>& sink);
+        void stop_recording_client(const std::shared_ptr<NetServer::ClientData>& client);
+        // The server that update messages go out through: the hosting server, else the recording server, else nullptr
+        NetServer* broadcast_server();
+        bool isReplay = false;
+
         bool is_connected();
 
         void input_add_file_to_canvas_callback(const CustomEvents::AddFileToCanvasEvent& addFile);
@@ -158,7 +167,8 @@ class World {
         void init_client_data_list_callbacks();
         void init_net_obj_type_list();
 
-        void init_client(const std::string& serverFullID);
+        void init_client(const std::string& serverFullID, bool replay = false);
+        std::shared_ptr<NetServer> recordServer; // EncxdedCanvas, see start_recording_client
         void set_name(const std::string& n);
 
         void draw_other_player_cursors(SkCanvas* canvas, const DrawData& drawData);

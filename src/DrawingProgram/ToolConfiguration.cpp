@@ -36,6 +36,8 @@ float& ToolConfiguration::get_stroke_size_relative_width_ref(DrawingProgramToolT
             return lineDraw.relativeWidth;
         case DrawingProgramToolType::BRUSH:
             return brush.relativeWidth;
+        case DrawingProgramToolType::HIGHLIGHTER:
+            return highlighter.relativeWidth;
         case DrawingProgramToolType::ELLIPSE:
             return ellipseDraw.relativeWidth;
         case DrawingProgramToolType::RECTANGLE:
@@ -56,6 +58,8 @@ const float& ToolConfiguration::get_stroke_size_relative_width_ref(DrawingProgra
             return lineDraw.relativeWidth;
         case DrawingProgramToolType::BRUSH:
             return brush.relativeWidth;
+        case DrawingProgramToolType::HIGHLIGHTER:
+            return highlighter.relativeWidth;
         case DrawingProgramToolType::ELLIPSE:
             return ellipseDraw.relativeWidth;
         case DrawingProgramToolType::RECTANGLE:
@@ -66,6 +70,10 @@ const float& ToolConfiguration::get_stroke_size_relative_width_ref(DrawingProgra
             return globalConf.relativeWidth;
     }
     return globalConf.relativeWidth;
+}
+
+std::array<float, 6>& ToolConfiguration::get_size_presets(DrawingProgramToolType toolType) {
+    return toolType == DrawingProgramToolType::HIGHLIGHTER ? globalConf.highlighterSizePresets : globalConf.penSizePresets;
 }
 
 std::pair<std::optional<float>, ToolConfiguration::RelativeWidthFailCode> ToolConfiguration::get_relative_width_from_value(DrawingProgram& drawP, const WorldScalar& camInverseScale, float relativeWidth) const {

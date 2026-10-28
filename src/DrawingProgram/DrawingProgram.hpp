@@ -47,6 +47,9 @@ class DrawingProgram {
         void update();
         void scale_up(const WorldScalar& scaleUpAmount);
         void draw(SkCanvas* canvas, const DrawData& drawData);
+        // EncxdedCanvas: selection box/handles and tool previews, drawn in screen space over the canvas (also recorded for replays)
+        void draw_overlays(SkCanvas* canvas, const DrawData& drawData);
+        const DrawingProgramSelection& get_selection() const { return selection; } // EncxdedCanvas: read by the recorder
         void write_components_server(cereal::PortableBinaryOutputArchive& a);
         void read_components_client(cereal::PortableBinaryInputArchive& a);
         void init_server_callbacks();
@@ -109,6 +112,9 @@ class DrawingProgram {
         void paint_popup(const Vector2f& popupPos);
 
         std::unique_ptr<DrawingProgramToolBase> drawTool;
+
+        // EncxdedCanvas: set when export mode is exited by tapping outside, so the screen can close the export panel
+        bool exportModeExitedByTap = false;
     private:
         void process_transform_message(const std::vector<std::pair<NetworkingObjects::NetObjID, CoordSpaceHelper>>& transforms);
 
@@ -133,6 +139,8 @@ class DrawingProgram {
 
         std::unique_ptr<DrawingProgramToolBase> toolToSwitchToAfterUpdate;
         bool toolSwitchBackAfterUpdate = false;
+        // EncxdedCanvas: tool to return to when export mode is exited by tapping outside
+        DrawingProgramToolType toolBeforeScreenshot = DrawingProgramToolType::BRUSH;
         std::unordered_set<CanvasComponentContainer::ObjInfo*> updateableComponents;
 
         enum class PointerDownState {
@@ -152,6 +160,7 @@ class DrawingProgram {
             FINGER_TOOL
         };
         bool temporaryEraser = false;
+        DrawingProgramToolType toolBeforeTemporaryEraser = DrawingProgramToolType::BRUSH;
         TemporaryMoveToolSwitch tempMoveToolSwitch = TemporaryMoveToolSwitch::NONE;
         DrawingProgramToolType toolTypeAfterTempMove;
         void temp_tool_switch(TemporaryMoveToolSwitch switchMode, DrawingProgramToolType newToolType);

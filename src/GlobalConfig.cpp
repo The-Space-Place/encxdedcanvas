@@ -67,6 +67,7 @@ nlohmann::json GlobalConfig::get_config_json(const InputManager& input) const {
     toRet["checkForUpdates"] = checkForUpdates;
 #endif
     toRet["videoDriver"] = videoDriver;
+    toRet["encxdedConfigRevision"] = ENCXDED_CONFIG_REVISION;
 
     json tablet;
     tablet["brushPressureSmoothingFactor"] = tabletOptions.brushPressureSmoothingFactor;
@@ -76,11 +77,13 @@ nlohmann::json GlobalConfig::get_config_json(const InputManager& input) const {
     tablet["ignoreMouseMovementWhenPenInProximity"] = tabletOptions.ignoreMouseMovementWhenPenInProximity;
     tablet["disableTouchWhenPenInProximity"] = tabletOptions.disableTouchWhenPenInProximity;
     tablet["brushMinimumSize"] = tabletOptions.brushMinimumSize;
+    tablet["brushPressureCurve"] = tabletOptions.brushPressureCurve;
     tablet["zoomWhilePenDownAndButtonHeld"] = tabletOptions.zoomWhilePenDownAndButtonHeld;
     toRet["tablet"] = tablet;
 
     toRet["guiOptions"] = guiOptions;
     toRet["touchOptions"] = touchOptions;
+    toRet["backgroundGrid"] = backgroundGrid;
 
     json debugJson;
     debugJson["mobileUI"] = mobileUI;
@@ -151,10 +154,21 @@ void GlobalConfig::set_config_json(InputManager& input, const nlohmann::json& j,
     try{j.at("tablet").at("ignoreMouseMovementWhenPenInProximity").get_to(tabletOptions.ignoreMouseMovementWhenPenInProximity);} catch(...) {}
     try{j.at("tablet").at("disableTouchWhenPenInProximity").get_to(tabletOptions.disableTouchWhenPenInProximity);} catch(...) {}
     try{j.at("tablet").at("brushMinimumSize").get_to(tabletOptions.brushMinimumSize);} catch(...) {}
+    try{j.at("tablet").at("brushPressureCurve").get_to(tabletOptions.brushPressureCurve);} catch(...) {}
     try{j.at("tablet").at("zoomWhilePenDownAndButtonHeld").get_to(tabletOptions.zoomWhilePenDownAndButtonHeld);} catch(...) {}
 
     try{j.at("guiOptions").get_to(guiOptions);} catch(...) {}
     try{j.at("touchOptions").get_to(touchOptions);} catch(...) {}
+    try{j.at("backgroundGrid").get_to(backgroundGrid);} catch(...) {}
+
+    // EncxdedCanvas: one-time upgrades of configs saved before a default changed
+    int encxdedRevision = 0;
+    try{j.at("encxdedConfigRevision").get_to(encxdedRevision);} catch(...) {}
+    if(encxdedRevision < 1) {
+        touchOptions.singleFingerAction = TouchOptions::SingleFingerAction::LASSO;
+        if(defaultCanvasBackgroundColor == Vector3f{0.07f, 0.07f, 0.07f}) // InfiniPaint's default
+            defaultCanvasBackgroundColor = DEFAULT_CANVAS_BACKGROUND_COLOR;
+    }
 
     try{j.at("debug").at("mobileUI").get_to(mobileUI);} catch(...) {}
     try{j.at("debug").at("jumpTransitionEasing").get_to(jumpTransitionEasing);} catch(...) {}
@@ -196,6 +210,7 @@ void GlobalConfig::load_default_palette() {
 }
 
 void GlobalConfig::load_licenses() {
+    thirdPartyLicenses.clear(); // EncxdedCanvas: load_config can run again (e.g. after restoring a backup)
     {
         int globCount;
         std::filesystem::path third_party_license_path("data/third_party_licenses");
