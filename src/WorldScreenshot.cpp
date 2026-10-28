@@ -104,7 +104,7 @@ void world_take_screenshot(World& w, const WorldScreenshotInfo& info) {
             auto skData = out.detachAsData();
             if(info.share) {
 #ifdef __ANDROID__
-                std::string tempSavePath = std::string(SDL_GetAndroidCachePath()) + "/screenshot" + world_screenshot_info_get_extension_from_type(info.type);
+                std::string tempSavePath = std::string(SDL_GetAndroidCachePath()) + "/" + info.filePath.filename().string(); // EncxdedCanvas: shared under the export name
                 if(!SDL_SaveFile(tempSavePath.c_str(), skData->bytes(), skData->size()))
                     throw std::runtime_error("SDL_SaveFile failed with error: " + std::string(SDL_GetError()));
                 AndroidJNICalls::shareInternalFiles({tempSavePath}, world_screenshot_info_get_mime_from_type(info.type), false);
@@ -120,7 +120,7 @@ void world_take_screenshot(World& w, const WorldScreenshotInfo& info) {
         if(success) {
             auto skData = out.detachAsData();
             emscripten_browser_file::download(
-                "screenshot" + world_screenshot_info_get_extension_from_type(info.type),
+                info.filePath.filename().string(), // EncxdedCanvas: export name
                 world_screenshot_info_get_mime_from_type(info.type),
                 std::string_view((const char*)skData->bytes(), skData->size())
             );
@@ -141,7 +141,7 @@ void world_take_screenshot(World& w, const WorldScreenshotInfo& info) {
             auto skData = out.detachAsData();
             if(info.share) {
 #ifdef __ANDROID__
-                std::string tempSavePath = std::string(SDL_GetAndroidCachePath()) + "/screenshot" + world_screenshot_info_get_extension_from_type(info.type);
+                std::string tempSavePath = std::string(SDL_GetAndroidCachePath()) + "/" + info.filePath.filename().string(); // EncxdedCanvas: shared under the export name
                 if(!SDL_SaveFile(tempSavePath.c_str(), skData->bytes(), skData->size()))
                     throw std::runtime_error("SDL_SaveFile failed with error: " + std::string(SDL_GetError()));
                 AndroidJNICalls::shareInternalFiles({tempSavePath}, world_screenshot_info_get_mime_from_type(info.type), false);
@@ -156,7 +156,7 @@ void world_take_screenshot(World& w, const WorldScreenshotInfo& info) {
     #else
         auto skData = out.detachAsData();
         emscripten_browser_file::download(
-            "screenshot" + world_screenshot_info_get_extension_from_type(info.type),
+            info.filePath.filename().string(), // EncxdedCanvas: export name
             world_screenshot_info_get_mime_from_type(info.type),
             std::string_view((const char*)skData->bytes(), skData->size())
         );

@@ -48,7 +48,24 @@
 
 ScreenshotTool::ScreenshotTool(DrawingProgram& initDrawP):
     DrawingProgramToolBase(initDrawP)
-{}
+{
+    controls.fileName = drawP.world.name;
+}
+
+// EncxdedCanvas: the typed name with characters that aren't allowed in file names removed, plus the extension
+std::string ScreenshotTool::export_file_name(WorldScreenshotInfo::ScreenshotType type) {
+    std::string name;
+    for(char c : controls.fileName)
+        if(static_cast<unsigned char>(c) >= 32 && std::string_view("/\\:*?\"<>|").find(c) == std::string_view::npos)
+            name += c;
+    while(!name.empty() && (name.back() == ' ' || name.back() == '.'))
+        name.pop_back();
+    while(!name.empty() && name.front() == ' ')
+        name.erase(name.begin());
+    if(name.empty())
+        name = "screenshot";
+    return name + world_screenshot_info_get_extension_from_type(type);
+}
 
 DrawingProgramToolType ScreenshotTool::get_type() {
     return DrawingProgramToolType::SCREENSHOT;
@@ -99,6 +116,7 @@ void ScreenshotTool::gui_phone_toolbox(CanvasEditorScreen& t) {
                 });
             }
             if(controls.selectionMode == ScreenshotControls::SelectionMode::SELECTION_EXISTS) {
+                input_text_field(gui, "export file name", "Name", &controls.fileName);
                 left_to_right_line_layout(gui, [&]() {
                     text_label_bold(gui, "Type");
                     gui.element<DropDown<size_t>>("image type select", (size_t*)(&screenshotConfig.selectedType), controls.typeSelections);
@@ -116,7 +134,7 @@ void ScreenshotTool::gui_phone_toolbox(CanvasEditorScreen& t) {
                             controls.setToShareScreenshot = false;
                             controls.selectionMode = ScreenshotControls::SelectionMode::NO_SELECTION;
                             #ifdef __EMSCRIPTEN__
-                                take_screenshot("a" + world_screenshot_info_get_extension_from_type(screenshotConfig.selectedType), screenshotConfig.selectedType);
+                                take_screenshot(export_file_name(screenshotConfig.selectedType), screenshotConfig.selectedType);
                             #else
                                 // We can't actually use the extension from the callback, so we have to set the extension of choice beforehand
                                 Screen::ExtensionFilter setExtensionFilter;
@@ -152,7 +170,7 @@ void ScreenshotTool::gui_phone_toolbox(CanvasEditorScreen& t) {
                                         s.controls.screenshotSaveType = s.drawP.world.main.toolConfig.screenshot.selectedType;
                                         s.controls.setToTakeScreenshot = true;
                                     }
-                                }, "screenshot", true);
+                                }, export_file_name(screenshotConfig.selectedType), true);
                             #endif
                         }
                     });
@@ -163,6 +181,7 @@ void ScreenshotTool::gui_phone_toolbox(CanvasEditorScreen& t) {
                             controls.setToShareScreenshot = true;
                             controls.selectionMode = ScreenshotControls::SelectionMode::NO_SELECTION;
                             controls.screenshotSaveType = drawP.world.main.toolConfig.screenshot.selectedType;
+                            controls.screenshotSavePath = export_file_name(controls.screenshotSaveType); // Only the file name is used when sharing
                             controls.setToTakeScreenshot = true;
                         }
                     });

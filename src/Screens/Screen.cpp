@@ -18,6 +18,8 @@
 
 #include "Screen.hpp"
 #include "../MainProgram.hpp"
+#include "../AndroidJNICalls.hpp"
+#include "../Encxded/FsUtil.hpp"
 
 Screen::Screen(MainProgram& m):
     main(m)
@@ -49,8 +51,18 @@ void Screen::open_file_selector(const std::string& filePickerName, const std::ve
         nativeFilePicker.sdlFileFilters.clear();
         for(auto& e : nativeFilePicker.extensionFiltersComplete)
             nativeFilePicker.sdlFileFilters.emplace_back(e.name.c_str(), e.extensions.c_str());
-        if(isSaving)
-            SDL_ShowSaveFileDialog(sdl_open_file_dialog_callback, nullptr, main.window.sdlWindow, nativeFilePicker.sdlFileFilters.data(), nativeFilePicker.sdlFileFilters.size(), nullptr);
+        if(isSaving) {
+            // EncxdedCanvas: suggest fileName in the save dialog
+            std::string defaultLocation;
+            if(!fileName.empty()) {
+#ifdef __ANDROID__
+                AndroidJNICalls::setSaveDialogSuggestedName(fileName);
+#else
+                defaultLocation = Encxded::utf8(main.homePath / Encxded::fs_path(fileName));
+#endif
+            }
+            SDL_ShowSaveFileDialog(sdl_open_file_dialog_callback, nullptr, main.window.sdlWindow, nativeFilePicker.sdlFileFilters.data(), nativeFilePicker.sdlFileFilters.size(), defaultLocation.empty() ? nullptr : defaultLocation.c_str());
+        }
         else
             SDL_ShowOpenFileDialog(sdl_open_file_dialog_callback, nullptr, main.window.sdlWindow, nativeFilePicker.sdlFileFilters.data(), nativeFilePicker.sdlFileFilters.size(), nullptr, false);
     }

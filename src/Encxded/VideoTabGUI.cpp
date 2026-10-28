@@ -141,7 +141,7 @@ void video_export_tab(MainProgram& main, const std::filesystem::path& canvasPath
         gui.new_id(static_cast<int64_t>(i), [&] {
             const Entry& e = entries[i];
             if(renaming == e.timeline) {
-                input_text(gui, "rename", &renameText, {});
+                input_text(gui, "rename text", &renameText, {});
                 left_to_right_line_layout(gui, [&] {
                     text_button(gui, "save", "Save", {.onClick = [&gui, e] {
                         rename_recording(e, renameText);

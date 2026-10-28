@@ -43,6 +43,7 @@ class ScreenshotTool : public DrawingProgramToolBase {
         virtual void cancel_finger_touch_callback(const FingerInput::TouchCallbackArgs& touch) override;
     private:
         void exit_export_mode();
+        std::string export_file_name(WorldScreenshotInfo::ScreenshotType type);
 
         void commit_rect();
         void take_screenshot(const std::filesystem::path& filePath, WorldScreenshotInfo::ScreenshotType screenshotType);
@@ -79,6 +80,7 @@ class ScreenshotTool : public DrawingProgramToolBase {
             std::atomic<bool> setToTakeScreenshot = false;
             bool setToShareScreenshot = false;
             std::filesystem::path screenshotSavePath;
+            std::string fileName; // EncxdedCanvas: export file name, without extension
             WorldScreenshotInfo::ScreenshotType screenshotSaveType;
         } controls;
         bool dragging_border_update(const Vector2f& camCursorPos);

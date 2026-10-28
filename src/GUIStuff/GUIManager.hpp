@@ -23,6 +23,7 @@
 #include <clay.h>
 #include "Elements/Element.hpp"
 #include "GUIFloatAnimation.hpp"
+#include <typeinfo>
 
 using namespace Eigen;
 
@@ -157,6 +158,8 @@ class GUIManager {
             auto& container = it->second;
             if(inserted)
                 container = {std::make_unique<NewElement>(*this)};
+            else if(!container.isUsedThisFrame && typeid(*container.elem) != typeid(NewElement)) // EncxdedCanvas: an ID reused by a different element type (e.g. a button replaced by a text box) gets a new element instead of a bad cast
+                container.elem = std::make_unique<NewElement>(*this);
             container.elem->zIndex = zIndex;
             orderedElements.emplace_back(&container);
             container.isUsedThisFrame = true;

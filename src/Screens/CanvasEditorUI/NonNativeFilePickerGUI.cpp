@@ -39,7 +39,7 @@ void NonNativeFilePickerGUI::open_file_selector_non_native(MainProgram& main, co
     extensionSelected = initExtensionFilters.size() - 1;
     filePickerWindowName = initFilePickerName;
     postSelectionFunc = initPostSelectionFunc;
-    fileName = "";
+    fileName = initFileName; // EncxdedCanvas: prefill the suggested name
     isSaving = initIsSaving;
     entriesScrollArea = nullptr;
     file_picker_gui_refresh_entries(main);
